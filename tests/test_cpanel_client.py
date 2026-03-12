@@ -49,16 +49,18 @@ def test_api2_request_includes_expected_query_params() -> None:
 def test_mass_edit_zone_serializes_operations() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         params = list(request.url.params.multi_items())
-        assert ("domain", "ginutech.com") in params
+        assert ("zone", "ginutech.com") in params
+        assert ("remove", "9") in params
         add_payload = next(value for key, value in params if key == "add")
-        assert json.loads(add_payload)["address"] == "203.0.113.25"
+        assert json.loads(add_payload)["data"] == ["203.0.113.25"]
         return httpx.Response(200, json={"result": {"status": 1, "data": {"ok": True}}})
 
     client = httpx.Client(base_url="https://cpanel.example.test:2083", transport=httpx.MockTransport(handler))
     api = CpanelClient(build_settings(), client=client)
     result = api.mass_edit_zone(
-        domain="ginutech.com",
-        add=[{"record_type": "A", "dname": "odoo.ginutech.com", "ttl": 300, "address": "203.0.113.25"}],
+        zone="ginutech.com",
+        add=[{"record_type": "A", "dname": "odoo.ginutech.com", "ttl": 300, "data": ["203.0.113.25"]}],
+        remove=[9],
     )
     assert result.data["ok"] is True
 

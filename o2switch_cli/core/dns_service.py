@@ -40,6 +40,11 @@ class DNSService:
         self._audit = audit
         self._reserved_labels = reserved_labels
 
+    @staticmethod
+    def _line_index(record: DNSRecord) -> int:
+        raw_value = record.record_id or record.raw.get("line_index") or record.raw.get("line")
+        return int(raw_value)
+
     def _zone_state(self, root_domain: str) -> tuple[list[DNSRecord], int | None]:
         result = self._client.parse_zone(root_domain)
         payload = result.data or {}
@@ -318,28 +323,23 @@ class DNSService:
             remove = None
             if len(matches) > 1:
                 action = "updated"
-                remove = [
-                    {
-                        "line_index": record.record_id or record.raw.get("line_index") or record.raw.get("line"),
-                    }
-                    for record in matches
-                ]
-                add = [{"record_type": "A", "dname": hostname, "ttl": resolved_ttl, "address": ipv4}]
+                remove = [self._line_index(record) for record in matches]
+                add = [{"record_type": "A", "dname": hostname, "ttl": resolved_ttl, "data": [ipv4]}]
             elif matches:
                 action = "updated"
                 edit = [
                     {
-                        "line_index": record.record_id or record.raw.get("line_index") or record.raw.get("line"),
+                        "line_index": self._line_index(record),
                         "record_type": "A",
                         "dname": hostname,
                         "ttl": resolved_ttl,
-                        "address": ipv4,
+                        "data": [ipv4],
                     }
                     for record in matches
                 ]
             else:
-                add = [{"record_type": "A", "dname": hostname, "ttl": resolved_ttl, "address": ipv4}]
-            self._client.mass_edit_zone(domain=root_domain, serial=serial, add=add, edit=edit, remove=remove)
+                add = [{"record_type": "A", "dname": hostname, "ttl": resolved_ttl, "data": [ipv4]}]
+            self._client.mass_edit_zone(zone=root_domain, serial=serial, add=add, edit=edit, remove=remove)
             applied = True
             if verify:
                 verification, _ = self._resolver.verify_a(hostname, ipv4)
@@ -407,13 +407,8 @@ class DNSService:
         hostname = normalize_hostname(fqdn)
         root_domain, serial, matches, plan = self.plan_delete_a_record(hostname, force=force)
         if not dry_run:
-            remove = [
-                {
-                    "line_index": record.record_id or record.raw.get("line_index") or record.raw.get("line"),
-                }
-                for record in matches
-            ]
-            self._client.mass_edit_zone(domain=root_domain, serial=serial, remove=remove)
+            remove = [self._line_index(record) for record in matches]
+            self._client.mass_edit_zone(zone=root_domain, serial=serial, remove=remove)
         verification = VerificationStatus.SKIPPED
         if not dry_run and verify:
             verification, _ = self._resolver.verify_a(hostname, None)

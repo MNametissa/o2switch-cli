@@ -78,7 +78,8 @@ def test_upsert_creates_record_when_missing() -> None:
         verify=True,
     )
     assert result.action == "created"
-    assert client.mass_edit_calls[0]["add"][0]["address"] == "203.0.113.25"
+    assert client.mass_edit_calls[0]["zone"] == "ginutech.com"
+    assert client.mass_edit_calls[0]["add"][0]["data"] == ["203.0.113.25"]
 
 
 def test_upsert_rejects_reserved_direct_hostname() -> None:
@@ -104,8 +105,8 @@ def test_upsert_force_normalizes_multiple_records_to_single_add() -> None:
     )
     assert plan.before is not None
     assert result.action == "updated"
-    assert client.mass_edit_calls[0]["remove"] == [{"line_index": "1"}, {"line_index": "2"}]
-    assert client.mass_edit_calls[0]["add"][0]["address"] == "203.0.113.99"
+    assert client.mass_edit_calls[0]["remove"] == [1, 2]
+    assert client.mass_edit_calls[0]["add"][0]["data"] == ["203.0.113.99"]
 
 
 def test_delete_rejects_ambiguous_records_without_force() -> None:
@@ -155,5 +156,5 @@ def test_forced_upsert_normalizes_multiple_records_into_one() -> None:
         verify=True,
     )
     assert result.action == "updated"
-    assert client.mass_edit_calls[0]["remove"][0]["line_index"] == "1"
-    assert client.mass_edit_calls[0]["add"][0]["address"] == "203.0.113.30"
+    assert client.mass_edit_calls[0]["remove"][0] == 1
+    assert client.mass_edit_calls[0]["add"][0]["data"] == ["203.0.113.30"]

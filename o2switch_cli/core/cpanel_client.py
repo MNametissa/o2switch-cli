@@ -105,18 +105,20 @@ class CpanelClient:
     def mass_edit_zone(
         self,
         *,
-        domain: str,
+        zone: str,
         serial: int | None = None,
         add: list[dict[str, Any]] | None = None,
         edit: list[dict[str, Any]] | None = None,
-        remove: list[dict[str, Any]] | None = None,
+        remove: list[int] | None = None,
     ) -> ApiResult:
-        params: list[tuple[str, str | int]] = [("domain", domain)]
+        params: list[tuple[str, str | int]] = [("zone", zone)]
         if serial is not None:
             params.append(("serial", serial))
-        for key, values in (("add", add or []), ("edit", edit or []), ("remove", remove or [])):
+        for key, values in (("add", add or []), ("edit", edit or [])):
             for value in values:
                 params.append((key, json.dumps(value)))
+        for line_index in remove or []:
+            params.append(("remove", line_index))
         payload = self._request("GET", "/execute/DNS/mass_edit_zone", params=params)
         return self._parse_uapi(payload, "DNS/mass_edit_zone")
 
