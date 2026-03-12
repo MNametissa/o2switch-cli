@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "dnspython>=2.6,<3.0",
   "httpx>=0.27,<1.0",
+  "platformdirs>=4.3,<5.0",
   "pydantic>=2.8,<3.0",
   "pydantic-settings>=2.4,<3.0",
   "questionary>=2.0,<3.0",
@@ -26,6 +27,7 @@ dev = [
 
 [project.scripts]
 o2switch-cli = "o2switch_cli.cli.main:run"
+o2switch_cli = "o2switch_cli.cli.main:run"
 
 [tool.setuptools.packages.find]
 include = ["o2switch_cli*"]

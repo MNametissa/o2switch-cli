@@ -21,6 +21,20 @@ Development bootstrap:
 ./install.sh --dev
 ```
 
+The installer also publishes launchers into `~/.local/bin` by default:
+
+```bash
+o2switch-cli --help
+o2switch_cli --help
+```
+
+Standalone uninstall:
+
+```bash
+./uninstall.sh
+./uninstall.sh --purge-config --purge-state
+```
+
 ## Configuration
 
 Convention de nommage:
@@ -43,6 +57,9 @@ Setup guidee:
 .venv/bin/o2switch-cli config init
 .venv/bin/o2switch-cli config init --path .env --test-api
 ```
+
+Par defaut, l'audit est ecrit dans le repertoire d'etat utilisateur de la plateforme.
+Sous Linux, cela devient typiquement `~/.local/state/o2switch-cli/audit.jsonl`.
 
 Setup non interactive:
 

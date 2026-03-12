@@ -7,7 +7,7 @@ import typer
 
 from o2switch_cli.cli.helpers import run_guarded
 from o2switch_cli.cli.ui import TerminalUI
-from o2switch_cli.config.settings import AppSettings, settings_summary, write_env_file
+from o2switch_cli.config.settings import AppSettings, default_audit_log_path, settings_summary, write_env_file
 from o2switch_cli.core.errors import ValidationAppError
 
 app = typer.Typer(help="Inspect active configuration and API reachability.", rich_markup_mode="rich")
@@ -47,7 +47,11 @@ def init_config(
     cpanel_user: str | None = typer.Option(None, "--cpanel-user", help="cPanel username."),
     cpanel_token: str | None = typer.Option(None, "--cpanel-token", help="cPanel API token."),
     default_ttl: int | None = typer.Option(None, "--default-ttl", help="Default TTL to write into the env file."),
-    audit_log_path: str | None = typer.Option(None, "--audit-log-path", help="Optional audit log file path."),
+    audit_log_path: str | None = typer.Option(
+        None,
+        "--audit-log-path",
+        help="Audit log file path. Defaults to the platform state directory.",
+    ),
     non_interactive: bool = typer.Option(
         False, "--non-interactive", help="Fail instead of prompting for missing values."
     ),
@@ -70,7 +74,11 @@ def init_config(
         user = cpanel_user or current.cpanel_user
         token = cpanel_token or (current.cpanel_token.get_secret_value() if current.cpanel_token else None)
         ttl = default_ttl if default_ttl is not None else current.default_ttl
-        audit_path = audit_log_path if audit_log_path is not None else current.audit_log_path
+        audit_path = (
+            audit_log_path
+            if audit_log_path is not None
+            else current.audit_log_path or default_audit_log_path()
+        )
 
         if not non_interactive:
             host = host or questionary.text("cPanel host", default=current.cpanel_host or "").ask()
@@ -81,12 +89,16 @@ def init_config(
                 ttl = int(ttl_text)
             except ValueError as exc:
                 raise ValidationAppError("config_init", "Default TTL must be an integer.", str(target)) from exc
-            audit_path = questionary.text("Audit log path (optional)", default=audit_path or "").ask() or None
+            audit_path = questionary.text("Audit log path", default=audit_path).ask() or audit_path
 
         host = host.strip() if host else None
         user = user.strip() if user else None
         token = token.strip() if token else None
-        audit_path = audit_path.strip() if isinstance(audit_path, str) and audit_path.strip() else None
+        audit_path = (
+            audit_path.strip()
+            if isinstance(audit_path, str) and audit_path.strip()
+            else default_audit_log_path()
+        )
 
         if not host or not user or not token:
             raise ValidationAppError(
@@ -115,7 +127,7 @@ def init_config(
                 "cpanel_host": host,
                 "cpanel_user": user,
                 "default_ttl": ttl,
-                "audit_log_path": audit_path or "",
+                "audit_log_path": audit_path,
             },
         )
 

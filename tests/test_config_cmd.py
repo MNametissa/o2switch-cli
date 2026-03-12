@@ -35,6 +35,7 @@ def test_config_init_writes_env_file_non_interactive(tmp_path: Path) -> None:
     assert "O2SWITCH_CLI_CPANEL_USER=demo" in content
     assert "O2SWITCH_CLI_CPANEL_TOKEN=secret-token" in content
     assert "O2SWITCH_CLI_DEFAULT_TTL=900" in content
+    assert "O2SWITCH_CLI_AUDIT_LOG_PATH=" in content
 
 
 def test_config_init_refuses_to_overwrite_without_force(tmp_path: Path) -> None:

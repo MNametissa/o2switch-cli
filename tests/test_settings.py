@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import SecretStr
 
-from o2switch_cli.config.settings import AppSettings, render_env_file, write_env_file
+from o2switch_cli.config.settings import AppSettings, default_audit_log_path, render_env_file, write_env_file
 
 
 def test_render_env_file_includes_expected_keys() -> None:
@@ -20,6 +20,12 @@ def test_render_env_file_includes_expected_keys() -> None:
     assert "O2SWITCH_CLI_CPANEL_USER=demo" in rendered
     assert "O2SWITCH_CLI_CPANEL_TOKEN=secret-token" in rendered
     assert "O2SWITCH_CLI_AUDIT_LOG_PATH=/tmp/o2switch-cli-audit.log" in rendered
+
+
+def test_default_audit_log_path_looks_like_app_state_path() -> None:
+    path = default_audit_log_path()
+    assert path.endswith("audit.jsonl")
+    assert "o2switch-cli" in path
 
 
 def test_write_env_file_creates_target(tmp_path: Path) -> None:

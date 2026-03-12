@@ -5,6 +5,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
+from platformdirs import user_state_dir
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,6 +17,11 @@ DEFAULT_RESERVED_LABELS = [
     "webmail",
     "autodiscover",
 ]
+APP_NAME = "o2switch-cli"
+
+
+def default_audit_log_path() -> str:
+    return str(Path(user_state_dir(APP_NAME)) / "audit.jsonl")
 
 
 class AppSettings(BaseSettings):
@@ -36,7 +42,7 @@ class AppSettings(BaseSettings):
     verify_dns_after_mutation: bool = True
     reserved_labels: list[str] = Field(default_factory=lambda: list(DEFAULT_RESERVED_LABELS))
     output_format: Literal["text", "json"] = "text"
-    audit_log_path: str | None = None
+    audit_log_path: str = Field(default_factory=default_audit_log_path)
 
 
 def _read_config_file(path: Path) -> dict[str, Any]:
@@ -102,9 +108,8 @@ def render_env_file(settings: AppSettings) -> str:
         f"O2SWITCH_CLI_TIMEOUT_SECONDS={_dotenv_value(settings.timeout_seconds)}",
         f"O2SWITCH_CLI_DEFAULT_TTL={_dotenv_value(settings.default_ttl)}",
         f"O2SWITCH_CLI_VERIFY_DNS_AFTER_MUTATION={_dotenv_value(settings.verify_dns_after_mutation)}",
+        f"O2SWITCH_CLI_AUDIT_LOG_PATH={_dotenv_value(settings.audit_log_path)}",
     ]
-    if settings.audit_log_path:
-        lines.append(f"O2SWITCH_CLI_AUDIT_LOG_PATH={_dotenv_value(settings.audit_log_path)}")
     return "\n".join(lines) + "\n"
 
 

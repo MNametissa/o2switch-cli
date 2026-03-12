@@ -8,6 +8,8 @@ PACKAGE_SPEC="."
 RUN_SETUP=1
 TEST_API=0
 ENV_FILE=".env"
+LINK_LOCAL_BIN=1
+LOCAL_BIN_DIR="${HOME}/.local/bin"
 
 usage() {
   cat <<'EOF'
@@ -20,6 +22,7 @@ Options:
   --skip-setup      Do not launch `o2switch-cli config init` after install.
   --test-api        Ask the setup command to test API access after writing credentials.
   --env-file PATH   Write credentials to PATH instead of .env.
+  --no-link         Do not publish launchers into ~/.local/bin.
   --help            Show this message and exit.
 EOF
 }
@@ -41,6 +44,10 @@ while [[ $# -gt 0 ]]; do
     --env-file)
       ENV_FILE="$2"
       shift 2
+      ;;
+    --no-link)
+      LINK_LOCAL_BIN=0
+      shift
       ;;
     --help)
       usage
@@ -68,6 +75,23 @@ fi
 echo "==> Installed successfully"
 echo "    Binary: $VENV_DIR/bin/o2switch-cli"
 
+if [[ "$LINK_LOCAL_BIN" -eq 1 ]]; then
+  mkdir -p "$LOCAL_BIN_DIR"
+  ln -sfn "$VENV_DIR/bin/o2switch-cli" "$LOCAL_BIN_DIR/o2switch-cli"
+  ln -sfn "$VENV_DIR/bin/o2switch_cli" "$LOCAL_BIN_DIR/o2switch_cli"
+  echo "==> Published launchers"
+  echo "    $LOCAL_BIN_DIR/o2switch-cli"
+  echo "    $LOCAL_BIN_DIR/o2switch_cli"
+  case ":$PATH:" in
+    *":$LOCAL_BIN_DIR:"*) ;;
+    *)
+      echo "==> Warning: $LOCAL_BIN_DIR is not in PATH"
+      echo "    Add this to your shell profile:"
+      echo "    export PATH=\"$LOCAL_BIN_DIR:\$PATH\""
+      ;;
+  esac
+fi
+
 if [[ "$RUN_SETUP" -eq 1 ]]; then
   if [[ -t 0 ]]; then
     echo "==> Launching setup wizard"
@@ -84,5 +108,13 @@ fi
 
 echo
 echo "Next steps:"
-echo "  $VENV_DIR/bin/o2switch-cli --help"
-echo "  $VENV_DIR/bin/o2switch-cli config show"
+if [[ "$LINK_LOCAL_BIN" -eq 1 ]]; then
+  echo "  o2switch-cli --help"
+  echo "  o2switch_cli --help"
+  echo "  o2switch-cli config show"
+  echo "  ./uninstall.sh"
+else
+  echo "  $VENV_DIR/bin/o2switch-cli --help"
+  echo "  $VENV_DIR/bin/o2switch-cli config show"
+  echo "  ./uninstall.sh"
+fi
