@@ -6,12 +6,15 @@ from typer.testing import CliRunner
 
 from o2switch_cli.cli.main import app
 from o2switch_cli.core.models import (
+    DomainDescriptor,
+    DomainType,
     HostnameSearchResult,
     MutationPlan,
     OperationMode,
     OperationResult,
     PlannedAction,
     SearchCategory,
+    SubdomainDescriptor,
     VerificationStatus,
 )
 
@@ -156,6 +159,46 @@ def test_dns_search_json_returns_available_category(monkeypatch) -> None:
     payload = json.loads(result.output)
     assert result.exit_code == 0
     assert payload[0]["category"] == "available"
+
+
+def test_domains_list_json_supports_pagination(monkeypatch) -> None:
+    class FakeDomains:
+        def list_domains(self) -> list[DomainDescriptor]:
+            return [
+                DomainDescriptor(domain="a.example.com", type=DomainType.MAIN),
+                DomainDescriptor(domain="b.example.com", type=DomainType.ADDON),
+            ]
+
+    class FakeRuntime:
+        domains = FakeDomains()
+
+    monkeypatch.setattr("o2switch_cli.cli.context.AppContext.runtime", lambda self: FakeRuntime())
+    result = runner.invoke(app, ["--json", "domains", "list", "--page", "2", "--page-size", "1"])
+    payload = json.loads(result.output)
+    assert result.exit_code == 0
+    assert [item["domain"] for item in payload] == ["b.example.com"]
+
+
+def test_subdomains_search_json_supports_pagination(monkeypatch) -> None:
+    class FakeSubdomains:
+        def search(self, term: str) -> list[SubdomainDescriptor]:
+            assert term == "ginutech"
+            return [
+                SubdomainDescriptor(fqdn="a.ginutech.com", label="a", root_domain="ginutech.com"),
+                SubdomainDescriptor(fqdn="b.ginutech.com", label="b", root_domain="ginutech.com"),
+            ]
+
+    class FakeRuntime:
+        subdomains = FakeSubdomains()
+
+    monkeypatch.setattr("o2switch_cli.cli.context.AppContext.runtime", lambda self: FakeRuntime())
+    result = runner.invoke(
+        app,
+        ["--json", "subdomains", "search", "ginutech", "--page", "1", "--page-size", "1"],
+    )
+    payload = json.loads(result.output)
+    assert result.exit_code == 0
+    assert [item["fqdn"] for item in payload] == ["a.ginutech.com"]
 
 
 def test_dns_verify_mismatch_returns_warning_exit_code(monkeypatch) -> None:
