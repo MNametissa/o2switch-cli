@@ -5,7 +5,15 @@ import json
 from typer.testing import CliRunner
 
 from o2switch_cli.cli.main import app
-from o2switch_cli.core.models import MutationPlan, OperationMode, OperationResult, PlannedAction, VerificationStatus
+from o2switch_cli.core.models import (
+    HostnameSearchResult,
+    MutationPlan,
+    OperationMode,
+    OperationResult,
+    PlannedAction,
+    SearchCategory,
+    VerificationStatus,
+)
 
 runner = CliRunner()
 
@@ -74,3 +82,100 @@ def test_dns_upsert_uses_runtime_and_returns_json(monkeypatch) -> None:
     assert result.exit_code == 0
     assert payload["operation"] == "dns_upsert"
     assert payload["action"] == "dry-run"
+
+
+def test_dns_verify_returns_warning_exit_code(monkeypatch) -> None:
+    class FakeDNS:
+        def verify_record(self, host: str, ip: str | None = None) -> OperationResult:
+            return OperationResult(
+                operation="dns_verify",
+                mode=OperationMode.DNS_ONLY,
+                target=host,
+                zone="ginutech.com",
+                action="verified",
+                applied=False,
+                verification=VerificationStatus.LOOKUP_FAILED,
+                message="lookup failed",
+            )
+
+    class FakeRuntime:
+        dns = FakeDNS()
+
+    monkeypatch.setattr("o2switch_cli.cli.context.AppContext.runtime", lambda self: FakeRuntime())
+    result = runner.invoke(app, ["--json", "dns", "verify", "--host", "odoo.ginutech.com"])
+    payload = json.loads(result.output)
+    assert result.exit_code == 7
+    assert payload["verification"] == "lookup_failed"
+
+
+def test_dns_search_json_returns_combined_categories(monkeypatch) -> None:
+    class FakeDNS:
+        def search(self, term: str) -> list[HostnameSearchResult]:
+            return [
+                HostnameSearchResult(
+                    category=SearchCategory.HOSTED_SUBDOMAINS,
+                    hostname="app.ginutech.com",
+                    managed_by_cpanel=True,
+                    zone="ginutech.com",
+                ),
+                HostnameSearchResult(
+                    category=SearchCategory.DNS_RECORDS,
+                    hostname="odoo.ginutech.com",
+                    record_type="A",
+                    value="203.0.113.25",
+                    zone="ginutech.com",
+                ),
+            ]
+
+    class FakeRuntime:
+        dns = FakeDNS()
+
+    monkeypatch.setattr("o2switch_cli.cli.context.AppContext.runtime", lambda self: FakeRuntime())
+    result = runner.invoke(app, ["--json", "dns", "search", "ginutech.com"])
+    payload = json.loads(result.output)
+    assert result.exit_code == 0
+    assert {item["category"] for item in payload} == {"hosted_subdomains", "dns_records"}
+
+
+
+def test_dns_search_json_returns_available_category(monkeypatch) -> None:
+    class FakeDNS:
+        def search(self, term: str):
+            return [
+                HostnameSearchResult(
+                    category=SearchCategory.AVAILABLE,
+                    hostname=term,
+                    zone="ginutech.com",
+                )
+            ]
+
+    class FakeRuntime:
+        dns = FakeDNS()
+
+    monkeypatch.setattr("o2switch_cli.cli.context.AppContext.runtime", lambda self: FakeRuntime())
+    result = runner.invoke(app, ["--json", "dns", "search", "free.ginutech.com"])
+    payload = json.loads(result.output)
+    assert result.exit_code == 0
+    assert payload[0]["category"] == "available"
+
+
+def test_dns_verify_returns_warning_exit_code(monkeypatch) -> None:
+    class FakeDNS:
+        def verify_record(self, host: str, ip: str | None = None):
+            return OperationResult(
+                operation="dns_verify",
+                mode=OperationMode.DNS_ONLY,
+                target=host,
+                zone="ginutech.com",
+                action="verified",
+                applied=False,
+                verification=VerificationStatus.RESOLVED_MISMATCH,
+                message="Mismatch",
+            )
+
+    class FakeRuntime:
+        dns = FakeDNS()
+
+    monkeypatch.setattr("o2switch_cli.cli.context.AppContext.runtime", lambda self: FakeRuntime())
+    result = runner.invoke(app, ["--json", "dns", "verify", "--host", "odoo.ginutech.com"])
+    assert result.exit_code == 7

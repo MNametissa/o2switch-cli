@@ -4,7 +4,12 @@ from o2switch_cli.core.audit import AuditService
 from o2switch_cli.core.cpanel_client import CpanelClient
 from o2switch_cli.core.dns_service import DNSService
 from o2switch_cli.core.domain_service import DomainService
-from o2switch_cli.core.errors import ConflictAppError, NotFoundAppError
+from o2switch_cli.core.errors import (
+    ConflictAppError,
+    NotFoundAppError,
+    NotSupportedAppError,
+    TransportAppError,
+)
 from o2switch_cli.core.models import (
     MutationPlan,
     OperationMode,
@@ -37,7 +42,10 @@ class SubdomainService:
 
     def search(self, term: str) -> list[SubdomainDescriptor]:
         needle = term.strip().lower()
-        payload = self._client.list_subdomains().data or []
+        try:
+            payload = self._client.list_subdomains().data or []
+        except TransportAppError:
+            payload = []
         descriptors: list[SubdomainDescriptor] = []
         for row in payload:
             if not isinstance(row, dict):
@@ -105,6 +113,9 @@ class SubdomainService:
         label = hostname[: -(len(root_domain) + 1)]
         if not label:
             raise NotFoundAppError("subdomain_delete", "The target is not a hosted subdomain.", hostname)
+        existing = [item for item in self.search(hostname) if item.fqdn == hostname]
+        if not existing:
+            raise NotFoundAppError("subdomain_delete", "The hosted subdomain was not found on the account.", hostname)
         plan = MutationPlan(
             operation="subdomain_delete",
             planned_action=PlannedAction.DELETE,
@@ -176,7 +187,16 @@ class SubdomainService:
         hostname = normalize_hostname(fqdn)
         root_domain, label, plan = self.plan_delete(hostname)
         if not dry_run:
-            self._client.delete_subdomain(domain=label, rootdomain=root_domain)
+            try:
+                self._client.delete_subdomain(domain=label, rootdomain=root_domain)
+            except TransportAppError as exc:
+                if self._looks_like_unsupported_delete(str(exc)):
+                    raise NotSupportedAppError(
+                        "subdomain_delete",
+                        "Hosted subdomain deletion is not supported by the detected cPanel API surface.",
+                        hostname,
+                    ) from exc
+                raise
         result = OperationResult(
             operation="subdomain_delete",
             mode=OperationMode.HOSTED_ONLY,
@@ -200,3 +220,16 @@ class SubdomainService:
             correlation_id=result.correlation_id,
         )
         return result
+
+    @staticmethod
+    def _looks_like_unsupported_delete(message: str) -> bool:
+        detail = message.lower()
+        patterns = (
+            "unknown app",
+            "unknown module",
+            "unknown function",
+            "function not found",
+            "invalid function",
+            "not supported",
+        )
+        return any(pattern in detail for pattern in patterns)

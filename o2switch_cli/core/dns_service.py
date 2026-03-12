@@ -3,19 +3,23 @@ from __future__ import annotations
 from o2switch_cli.core.audit import AuditService
 from o2switch_cli.core.cpanel_client import CpanelClient
 from o2switch_cli.core.domain_service import DomainService
-from o2switch_cli.core.errors import ConflictAppError, NotFoundAppError
+from o2switch_cli.core.errors import ConflictAppError, NotFoundAppError, TransportAppError
 from o2switch_cli.core.models import (
     DNSRecord,
+    HostnameSearchResult,
     MutationPlan,
     OperationMode,
     OperationResult,
     PlannedAction,
+    SearchCategory,
+    SubdomainDescriptor,
     VerificationStatus,
 )
 from o2switch_cli.core.validators import (
     canonical_record_name,
     normalize_hostname,
     validate_ipv4,
+    validate_reserved_hostname,
     validate_ttl,
 )
 from o2switch_cli.infra.resolver import DNSResolver
@@ -28,11 +32,13 @@ class DNSService:
         domains: DomainService,
         resolver: DNSResolver,
         audit: AuditService,
+        reserved_labels: list[str],
     ) -> None:
         self._client = client
         self._domains = domains
         self._resolver = resolver
         self._audit = audit
+        self._reserved_labels = reserved_labels
 
     def _zone_state(self, root_domain: str) -> tuple[list[DNSRecord], int | None]:
         result = self._client.parse_zone(root_domain)
@@ -116,13 +122,95 @@ class DNSService:
         records, _ = self._zone_state(root_domain)
         return [item for item in records if item.name == hostname and item.type == record_type.upper()]
 
-    def search(self, term: str) -> list[DNSRecord]:
+    def _hosted_subdomains(self, term: str) -> list[SubdomainDescriptor]:
         needle = term.strip().lower()
-        matches: list[DNSRecord] = []
+        descriptors: list[SubdomainDescriptor] = []
+        try:
+            payload = self._client.list_subdomains().data or []
+        except TransportAppError:
+            payload = []
+        for row in payload:
+            if not isinstance(row, dict):
+                continue
+            fqdn = normalize_hostname(str(row.get("domain") or row.get("fullsubdomain") or ""))
+            if not fqdn or (needle and needle not in fqdn):
+                continue
+            root_domain = self._domains.resolve_root_domain(fqdn, "dns_search")
+            descriptors.append(
+                SubdomainDescriptor(
+                    fqdn=fqdn,
+                    label=fqdn[: -(len(root_domain) + 1)],
+                    root_domain=root_domain,
+                    docroot=str(row.get("dir") or row.get("documentroot") or ""),
+                    managed_by_cpanel=True,
+                )
+            )
+        if descriptors:
+            return sorted(descriptors, key=lambda item: item.fqdn)
+
+        for item in self._domains.list_domains():
+            if item.type.value != "subdomain":
+                continue
+            if needle and needle not in item.domain:
+                continue
+            root_domain = self._domains.resolve_root_domain(item.domain, "dns_search")
+            descriptors.append(
+                SubdomainDescriptor(
+                    fqdn=item.domain,
+                    label=item.domain[: -(len(root_domain) + 1)],
+                    root_domain=root_domain,
+                    managed_by_cpanel=True,
+                )
+            )
+        return sorted(descriptors, key=lambda item: item.fqdn)
+
+    def search(self, term: str) -> list[HostnameSearchResult]:
+        needle = term.strip().lower()
+        matches: list[HostnameSearchResult] = []
+        for hosted in self._hosted_subdomains(term):
+            matches.append(
+                HostnameSearchResult(
+                    category=SearchCategory.HOSTED_SUBDOMAINS,
+                    hostname=hosted.fqdn,
+                    managed_by_cpanel=True,
+                    zone=hosted.root_domain,
+                    docroot=hosted.docroot,
+                )
+            )
         for root_domain in self._domains.root_domains():
             records, _ = self._zone_state(root_domain)
-            matches.extend([item for item in records if needle in item.name.lower() or needle in item.value.lower()])
-        return matches
+            for item in records:
+                if needle in item.name.lower() or needle in item.value.lower():
+                    matches.append(
+                        HostnameSearchResult(
+                            category=SearchCategory.DNS_RECORDS,
+                            hostname=item.name,
+                            record_type=item.type,
+                            value=item.value,
+                            managed_by_cpanel=False,
+                            zone=item.zone,
+                        )
+                    )
+        if matches:
+            return sorted(matches, key=lambda item: (item.hostname, item.category.value, item.record_type or ""))
+        try:
+            hostname = normalize_hostname(term)
+        except Exception:
+            return []
+        if "." not in hostname:
+            return []
+        try:
+            root_domain = self._domains.resolve_root_domain(hostname, "dns_search")
+        except NotFoundAppError:
+            return []
+        return [
+            HostnameSearchResult(
+                category=SearchCategory.AVAILABLE,
+                hostname=hostname,
+                managed_by_cpanel=False,
+                zone=root_domain,
+            )
+        ]
 
     def plan_upsert_a_record(
         self, fqdn: str, ip: str, ttl: int, *, force: bool
@@ -131,6 +219,7 @@ class DNSService:
         ipv4 = validate_ipv4(ip)
         resolved_ttl = validate_ttl(ttl, ttl)
         root_domain = self._domains.resolve_root_domain(hostname, "dns_upsert")
+        validate_reserved_hostname(hostname, root_domain, self._reserved_labels)
         records, serial = self._zone_state(root_domain)
         matches = [item for item in records if item.name == hostname and item.type == "A"]
         plan = self._build_upsert_plan(hostname, ipv4, resolved_ttl, matches, force=force)
@@ -148,6 +237,15 @@ class DNSService:
             )
         if len(records) > 1 and not force:
             raise ConflictAppError("dns_upsert", "Multiple A records already exist for the hostname.", fqdn)
+        if len(records) > 1 and force:
+            return MutationPlan(
+                operation="dns_upsert",
+                planned_action=PlannedAction.UPDATE,
+                before={"records": [record.model_dump() for record in records]},
+                after={"name": fqdn, "type": "A", "value": ip, "ttl": ttl},
+                requires_force=True,
+                summary=f"Normalize {len(records)} A records for {fqdn} to a single target {ip} (ttl={ttl}).",
+            )
         if len(records) == 1 and records[0].value == ip and records[0].ttl == ttl:
             return MutationPlan(
                 operation="dns_upsert",
@@ -208,7 +306,17 @@ class DNSService:
         if not dry_run:
             add = None
             edit = None
-            if matches:
+            remove = None
+            if len(matches) > 1:
+                action = "updated"
+                remove = [
+                    {
+                        "line_index": record.record_id or record.raw.get("line_index") or record.raw.get("line"),
+                    }
+                    for record in matches
+                ]
+                add = [{"record_type": "A", "dname": hostname, "ttl": resolved_ttl, "address": ipv4}]
+            elif matches:
                 action = "updated"
                 edit = [
                     {
@@ -222,12 +330,10 @@ class DNSService:
                 ]
             else:
                 add = [{"record_type": "A", "dname": hostname, "ttl": resolved_ttl, "address": ipv4}]
-            self._client.mass_edit_zone(domain=root_domain, serial=serial, add=add, edit=edit)
+            self._client.mass_edit_zone(domain=root_domain, serial=serial, add=add, edit=edit, remove=remove)
             applied = True
             if verify:
-                verification, addresses = self._resolver.verify_a(hostname, ipv4)
-                if verification is VerificationStatus.RESOLVED_MISMATCH:
-                    action = action
+                verification, _ = self._resolver.verify_a(hostname, ipv4)
             else:
                 verification = VerificationStatus.ACCEPTED_PENDING_VISIBILITY
         result = OperationResult(

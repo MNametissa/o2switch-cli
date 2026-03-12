@@ -7,6 +7,7 @@ from pydantic import SecretStr
 
 from o2switch_cli.config.settings import AppSettings
 from o2switch_cli.core.cpanel_client import CpanelClient
+from o2switch_cli.core.errors import AuthAppError
 
 
 def build_settings() -> AppSettings:
@@ -60,3 +61,17 @@ def test_mass_edit_zone_serializes_operations() -> None:
         add=[{"record_type": "A", "dname": "odoo.ginutech.com", "ttl": 300, "address": "203.0.113.25"}],
     )
     assert result.data["ok"] is True
+
+
+
+def test_uapi_401_maps_to_auth_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"status": 0})
+
+    client = httpx.Client(base_url="https://cpanel.example.test:2083", transport=httpx.MockTransport(handler))
+    api = CpanelClient(build_settings(), client=client)
+    try:
+        api.list_domains()
+    except AuthAppError:
+        return
+    raise AssertionError("Expected AuthAppError")

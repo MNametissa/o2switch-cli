@@ -9,8 +9,10 @@ from o2switch_cli.core.validators import (
     normalize_docroot,
     normalize_hostname,
     normalize_label,
+    relative_name,
     select_root_domain,
     validate_ipv4,
+    validate_reserved_hostname,
     validate_ttl,
 )
 
@@ -54,3 +56,14 @@ def test_fqdn_and_docroot_helpers() -> None:
     assert fqdn_for_label("odoo", "ginutech.com") == "odoo.ginutech.com"
     assert normalize_docroot("public_html/odoo", "odoo") == "/public_html/odoo"
     assert canonical_record_name("odoo", "ginutech.com") == "odoo.ginutech.com"
+    assert relative_name("odoo.ginutech.com", "ginutech.com") == "odoo"
+
+
+def test_reserved_direct_hostname_is_rejected() -> None:
+    with pytest.raises(ValidationAppError):
+        validate_reserved_hostname("mail.ginutech.com", "ginutech.com", ["mail"])
+
+
+def test_invalid_hostname_characters_are_rejected() -> None:
+    with pytest.raises(ValidationAppError):
+        normalize_hostname("bad_name.ginutech.com")

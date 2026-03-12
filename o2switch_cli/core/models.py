@@ -48,6 +48,12 @@ class ErrorClass(StrEnum):
     NOT_SUPPORTED = "not_supported"
 
 
+class SearchCategory(StrEnum):
+    DNS_RECORDS = "dns_records"
+    HOSTED_SUBDOMAINS = "hosted_subdomains"
+    AVAILABLE = "available"
+
+
 class DomainDescriptor(BaseModel):
     domain: str
     type: DomainType
@@ -71,6 +77,16 @@ class SubdomainDescriptor(BaseModel):
     root_domain: str
     docroot: str | None = None
     managed_by_cpanel: bool = True
+
+
+class HostnameSearchResult(BaseModel):
+    category: SearchCategory
+    hostname: str
+    record_type: str | None = None
+    value: str | None = None
+    managed_by_cpanel: bool = False
+    zone: str | None = None
+    docroot: str | None = None
 
 
 class MutationPlan(BaseModel):

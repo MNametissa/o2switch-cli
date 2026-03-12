@@ -1,23 +1,36 @@
 from __future__ import annotations
 
 import ipaddress
+import re
 from pathlib import PurePosixPath
 
 from o2switch_cli.core.errors import NotFoundAppError, ValidationAppError
+
+HOST_LABEL_RE = re.compile(r"^[a-z0-9-]+$")
 
 
 def normalize_hostname(value: str) -> str:
     hostname = value.strip().lower().rstrip(".")
     if not hostname:
         raise ValidationAppError("hostname", "Hostname cannot be empty.")
+    if len(hostname) > 253:
+        raise ValidationAppError("hostname", "Hostname exceeds the maximum length of 253 characters.", hostname)
     if ".." in hostname:
         raise ValidationAppError("hostname", "Hostname contains an empty segment.", hostname)
     labels = hostname.split(".")
     for label in labels:
         if not label:
             raise ValidationAppError("hostname", "Hostname contains an empty segment.", hostname)
+        if len(label) > 63:
+            raise ValidationAppError("hostname", "Hostname labels cannot exceed 63 characters.", hostname)
         if label.startswith("-") or label.endswith("-"):
             raise ValidationAppError("hostname", "Hostname labels cannot start or end with '-'.", hostname)
+        if not HOST_LABEL_RE.fullmatch(label):
+            raise ValidationAppError(
+                "hostname",
+                "Hostname labels may only contain lowercase letters, digits, and hyphens.",
+                hostname,
+            )
     return hostname
 
 
@@ -72,6 +85,29 @@ def select_root_domain(hostname: str, root_domains: list[str], operation: str) -
 
 def fqdn_for_label(label: str, root_domain: str) -> str:
     return normalize_hostname(f"{label}.{normalize_hostname(root_domain)}")
+
+
+def relative_name(hostname: str, root_domain: str) -> str:
+    fqdn = normalize_hostname(hostname)
+    zone = normalize_hostname(root_domain)
+    if fqdn == zone:
+        return ""
+    suffix = f".{zone}"
+    if not fqdn.endswith(suffix):
+        raise ValidationAppError("hostname", "Hostname does not belong to the selected root domain.", fqdn)
+    return fqdn[: -len(suffix)]
+
+
+def validate_reserved_hostname(hostname: str, root_domain: str, reserved_labels: list[str]) -> None:
+    local_name = relative_name(hostname, root_domain)
+    if not local_name or "." in local_name:
+        return
+    if local_name.lower() in {item.lower() for item in reserved_labels}:
+        raise ValidationAppError(
+            "dns_upsert",
+            f"'{local_name}' is a reserved direct hostname on this account.",
+            hostname,
+        )
 
 
 def canonical_record_name(name: str, zone: str) -> str:

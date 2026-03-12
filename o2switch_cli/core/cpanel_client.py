@@ -7,7 +7,7 @@ import httpx
 
 from o2switch_cli.config.settings import AppSettings
 from o2switch_cli.core.auth import auth_header
-from o2switch_cli.core.errors import PermissionAppError, TransportAppError
+from o2switch_cli.core.errors import AuthAppError, PermissionAppError, TransportAppError
 from o2switch_cli.core.models import ApiResult
 
 
@@ -39,7 +39,9 @@ class CpanelClient:
             response = self._client.request(method, path, params=params)
         except httpx.HTTPError as exc:
             raise TransportAppError("cpanel_request", str(exc)) from exc
-        if response.status_code in {401, 403}:
+        if response.status_code == 401:
+            raise AuthAppError("cpanel_request", "cPanel rejected the API token or credentials.")
+        if response.status_code == 403:
             raise PermissionAppError("cpanel_request")
         try:
             response.raise_for_status()

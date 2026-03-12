@@ -37,7 +37,7 @@ def run_interactive_menu(app_context: AppContext) -> None:
             ui.print_domains(app_context.runtime().domains.search(term))
         elif choice == "DNS: search":
             term = questionary.text("Search term").ask() or ""
-            ui.print_records(app_context.runtime().dns.search(term))
+            ui.print_hostname_search_results(app_context.runtime().dns.search(term))
         elif choice == "DNS: upsert A record":
             host = questionary.text("Hostname").ask() or ""
             ip = questionary.text("IPv4 target").ask() or ""

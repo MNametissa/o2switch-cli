@@ -48,7 +48,7 @@ class AppContext:
             )
             domains = DomainService(client)
             resolver = DNSResolver()
-            dns = DNSService(client, domains, resolver, audit)
+            dns = DNSService(client, domains, resolver, audit, self.settings.reserved_labels)
             subdomains = SubdomainService(
                 client,
                 domains,

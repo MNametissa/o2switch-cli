@@ -14,6 +14,7 @@ from o2switch_cli.core.models import (
     DNSRecord,
     DomainDescriptor,
     ErrorEnvelope,
+    HostnameSearchResult,
     MutationPlan,
     OperationResult,
     SubdomainDescriptor,
@@ -86,6 +87,28 @@ class TerminalUI:
         table.add_column("Zone")
         for item in records:
             table.add_row(item.name, item.type, item.value or "-", str(item.ttl or "-"), item.zone)
+        self.console.print(table)
+
+    def print_hostname_search_results(self, results: list[HostnameSearchResult]) -> None:
+        if self.output_format == "json":
+            self._print_json([item.model_dump(mode="json") for item in results])
+            return
+        table = Table(title="Hostname Search", box=box.SIMPLE_HEAVY, border_style="cyan")
+        table.add_column("Category", style="bold")
+        table.add_column("Hostname")
+        table.add_column("Type")
+        table.add_column("Value")
+        table.add_column("Zone")
+        table.add_column("Hosted")
+        for item in results:
+            table.add_row(
+                item.category.value,
+                item.hostname,
+                item.record_type or "-",
+                item.value or item.docroot or "-",
+                item.zone or "-",
+                "yes" if item.managed_by_cpanel else "no",
+            )
         self.console.print(table)
 
     def print_subdomains(self, subdomains: list[SubdomainDescriptor]) -> None:

@@ -19,6 +19,10 @@ class DNSResolver:
     def verify_a(self, hostname: str, expected_ip: str | None = None) -> tuple[VerificationStatus, list[str]]:
         try:
             addresses = self.resolve_a(hostname)
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
+            if expected_ip is None:
+                return VerificationStatus.RESOLVED_MATCHES_TARGET, []
+            return VerificationStatus.LOOKUP_FAILED, []
         except (dns.exception.DNSException, OSError):
             return VerificationStatus.LOOKUP_FAILED, []
         if expected_ip is None:

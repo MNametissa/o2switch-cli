@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from o2switch_cli.cli.helpers import confirm_plan, run_guarded
+from o2switch_cli.cli.helpers import confirm_plan, exit_for_result_warning, run_guarded
 from o2switch_cli.cli.ui import TerminalUI
 
 app = typer.Typer(help="Manage hosted cPanel subdomains.", rich_markup_mode="rich")
@@ -46,6 +46,7 @@ def create_subdomain(
             verify=app_context.verify_after_mutation,
         )
         ui.print_result(result)
+        exit_for_result_warning(result)
 
     run_guarded(ctx, action)
 
