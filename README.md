@@ -9,6 +9,18 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
 ```
 
+Standalone bootstrap:
+
+```bash
+./install.sh
+```
+
+Development bootstrap:
+
+```bash
+./install.sh --dev
+```
+
 ## Configuration
 
 Convention de nommage:
@@ -25,10 +37,29 @@ export O2SWITCH_CLI_CPANEL_USER=mon_user
 export O2SWITCH_CLI_CPANEL_TOKEN=mon_token
 ```
 
+Setup guidee:
+
+```bash
+.venv/bin/o2switch-cli config init
+.venv/bin/o2switch-cli config init --path .env --test-api
+```
+
+Setup non interactive:
+
+```bash
+.venv/bin/o2switch-cli config init \
+  --path .env \
+  --cpanel-host saule.o2switch.net \
+  --cpanel-user mon_user \
+  --cpanel-token mon_token \
+  --non-interactive
+```
+
 ## Usage
 
 ```bash
 .venv/bin/o2switch-cli --help
+.venv/bin/o2switch-cli config init --help
 .venv/bin/o2switch-cli domains list
 .venv/bin/o2switch-cli dns upsert --host odoo-staging.ginutech.com --ip 203.0.113.25
 .venv/bin/o2switch-cli dns delete --host odoo-staging.ginutech.com --dry-run
