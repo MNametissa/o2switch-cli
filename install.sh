@@ -10,6 +10,47 @@ TEST_API=0
 ENV_FILE=".env"
 LINK_LOCAL_BIN=1
 LOCAL_BIN_DIR="${HOME}/.local/bin"
+BASHRC_FILE="${HOME}/.bashrc"
+BASHRC_MARKER_START="# >>> o2switch-cli >>>"
+BASHRC_MARKER_END="# <<< o2switch-cli <<<"
+
+managed_bashrc_block() {
+  cat <<'EOF'
+# >>> o2switch-cli >>>
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+# <<< o2switch-cli <<<
+EOF
+}
+
+bashrc_has_local_bin_path() {
+  [[ -f "$BASHRC_FILE" ]] && grep -Eq '(\$HOME|\$\{HOME\}|~)/\.local/bin' "$BASHRC_FILE"
+}
+
+ensure_bashrc_path_block() {
+  mkdir -p "$(dirname "$BASHRC_FILE")"
+  touch "$BASHRC_FILE"
+  if grep -Fq "$BASHRC_MARKER_START" "$BASHRC_FILE"; then
+    return
+  fi
+  if bashrc_has_local_bin_path; then
+    echo "==> Detected existing ~/.local/bin PATH config in $BASHRC_FILE"
+    return
+  fi
+  {
+    printf '\n'
+    managed_bashrc_block
+    printf '\n'
+  } >> "$BASHRC_FILE"
+  echo "==> Updated $BASHRC_FILE"
+  echo "    Added managed PATH block for ~/.local/bin"
+}
+
+print_shell_refresh_note() {
+  echo "==> Reload shell configuration"
+  echo "    Run: source \"$BASHRC_FILE\" && hash -r"
+}
 
 usage() {
   cat <<'EOF'
@@ -79,15 +120,15 @@ if [[ "$LINK_LOCAL_BIN" -eq 1 ]]; then
   mkdir -p "$LOCAL_BIN_DIR"
   ln -sfn "$VENV_DIR/bin/o2switch-cli" "$LOCAL_BIN_DIR/o2switch-cli"
   ln -sfn "$VENV_DIR/bin/o2switch_cli" "$LOCAL_BIN_DIR/o2switch_cli"
+  ensure_bashrc_path_block
   echo "==> Published launchers"
   echo "    $LOCAL_BIN_DIR/o2switch-cli"
   echo "    $LOCAL_BIN_DIR/o2switch_cli"
   case ":$PATH:" in
     *":$LOCAL_BIN_DIR:"*) ;;
     *)
-      echo "==> Warning: $LOCAL_BIN_DIR is not in PATH"
-      echo "    Add this to your shell profile:"
-      echo "    export PATH=\"$LOCAL_BIN_DIR:\$PATH\""
+      echo "==> Warning: $LOCAL_BIN_DIR is not active in the current shell PATH"
+      print_shell_refresh_note
       ;;
   esac
 fi
@@ -118,3 +159,4 @@ else
   echo "  $VENV_DIR/bin/o2switch-cli config show"
   echo "  ./uninstall.sh"
 fi
+print_shell_refresh_note

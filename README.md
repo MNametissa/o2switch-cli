@@ -28,15 +28,18 @@ o2switch-cli --help
 o2switch_cli --help
 ```
 
+Quand l'installateur detecte que `~/.local/bin` n'est pas deja gere dans `~/.bashrc`, il ajoute un bloc balise pour ce PATH. Apres installation ou desinstallation, rechargez votre shell courant:
+
+```bash
+source ~/.bashrc && hash -r
+```
+
 Standalone uninstall:
 
 ```bash
 ./uninstall.sh
 ./uninstall.sh --purge-config --purge-state
 ```
-
-Apres desinstallation, le shell courant peut encore garder l'ancien chemin du binaire en cache.
-Dans ce cas, lancez `hash -r` ou ouvrez un nouveau terminal.
 
 ## Configuration
 

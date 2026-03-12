@@ -8,6 +8,30 @@ ENV_FILE="$ROOT_DIR/.env"
 REMOVE_ENV=0
 REMOVE_STATE=0
 YES=0
+BASHRC_FILE="${HOME}/.bashrc"
+BASHRC_MARKER_START="# >>> o2switch-cli >>>"
+BASHRC_MARKER_END="# <<< o2switch-cli <<<"
+
+remove_bashrc_path_block() {
+  local tmp_file
+  if [[ ! -f "$BASHRC_FILE" ]] || ! grep -Fq "$BASHRC_MARKER_START" "$BASHRC_FILE"; then
+    return
+  fi
+  tmp_file="$(mktemp)"
+  awk -v start="$BASHRC_MARKER_START" -v end="$BASHRC_MARKER_END" '
+    $0 == start { skip = 1; next }
+    $0 == end { skip = 0; next }
+    skip != 1 { print }
+  ' "$BASHRC_FILE" > "$tmp_file"
+  mv "$tmp_file" "$BASHRC_FILE"
+  echo "==> Updated $BASHRC_FILE"
+  echo "    Removed managed o2switch-cli PATH block"
+}
+
+print_shell_refresh_note() {
+  echo "==> Reload shell configuration"
+  echo "    Run: source \"$BASHRC_FILE\" && hash -r"
+}
 
 default_audit_log_path() {
   if [[ -x "$VENV_DIR/bin/python" ]]; then
@@ -94,6 +118,8 @@ for launcher in "$LOCAL_BIN_DIR/o2switch-cli" "$LOCAL_BIN_DIR/o2switch_cli"; do
   fi
 done
 
+remove_bashrc_path_block
+
 if [[ "$REMOVE_ENV" -eq 1 ]]; then
   rm -f "$ENV_FILE"
 fi
@@ -103,8 +129,4 @@ if [[ "$REMOVE_STATE" -eq 1 ]]; then
 fi
 
 echo "==> Uninstall completed"
-echo
-echo "Shell note:"
-echo "  If your current shell still resolves an old launcher path, run:"
-echo "  hash -r"
-echo "  or open a new shell session."
+print_shell_refresh_note
