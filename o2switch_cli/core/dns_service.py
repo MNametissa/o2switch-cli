@@ -135,7 +135,10 @@ class DNSService:
             fqdn = normalize_hostname(str(row.get("domain") or row.get("fullsubdomain") or ""))
             if not fqdn or (needle and needle not in fqdn):
                 continue
-            root_domain = self._domains.resolve_root_domain(fqdn, "dns_search")
+            try:
+                root_domain = self._domains.resolve_root_domain(fqdn, "dns_search")
+            except NotFoundAppError:
+                continue
             descriptors.append(
                 SubdomainDescriptor(
                     fqdn=fqdn,
@@ -153,7 +156,10 @@ class DNSService:
                 continue
             if needle and needle not in item.domain:
                 continue
-            root_domain = self._domains.resolve_root_domain(item.domain, "dns_search")
+            try:
+                root_domain = self._domains.resolve_root_domain(item.domain, "dns_search")
+            except NotFoundAppError:
+                continue
             descriptors.append(
                 SubdomainDescriptor(
                     fqdn=item.domain,
@@ -178,7 +184,10 @@ class DNSService:
                 )
             )
         for root_domain in self._domains.root_domains():
-            records, _ = self._zone_state(root_domain)
+            try:
+                records, _ = self._zone_state(root_domain)
+            except TransportAppError:
+                continue
             for item in records:
                 if needle in item.name.lower() or needle in item.value.lower():
                     matches.append(

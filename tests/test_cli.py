@@ -84,7 +84,7 @@ def test_dns_upsert_uses_runtime_and_returns_json(monkeypatch) -> None:
     assert payload["action"] == "dry-run"
 
 
-def test_dns_verify_returns_warning_exit_code(monkeypatch) -> None:
+def test_dns_verify_lookup_failure_returns_warning_exit_code(monkeypatch) -> None:
     class FakeDNS:
         def verify_record(self, host: str, ip: str | None = None) -> OperationResult:
             return OperationResult(
@@ -137,7 +137,6 @@ def test_dns_search_json_returns_combined_categories(monkeypatch) -> None:
     assert {item["category"] for item in payload} == {"hosted_subdomains", "dns_records"}
 
 
-
 def test_dns_search_json_returns_available_category(monkeypatch) -> None:
     class FakeDNS:
         def search(self, term: str):
@@ -159,7 +158,7 @@ def test_dns_search_json_returns_available_category(monkeypatch) -> None:
     assert payload[0]["category"] == "available"
 
 
-def test_dns_verify_returns_warning_exit_code(monkeypatch) -> None:
+def test_dns_verify_mismatch_returns_warning_exit_code(monkeypatch) -> None:
     class FakeDNS:
         def verify_record(self, host: str, ip: str | None = None):
             return OperationResult(
