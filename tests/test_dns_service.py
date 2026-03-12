@@ -133,7 +133,6 @@ def test_search_combines_hosted_dns_and_available_states() -> None:
     assert available[0].category is SearchCategory.AVAILABLE
 
 
-
 def test_search_returns_available_when_hostname_is_free() -> None:
     _, service = build_service([])
     results = service.search("free.ginutech.com")

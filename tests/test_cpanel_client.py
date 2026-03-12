@@ -63,7 +63,6 @@ def test_mass_edit_zone_serializes_operations() -> None:
     assert result.data["ok"] is True
 
 
-
 def test_uapi_401_maps_to_auth_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(401, json={"status": 0})
