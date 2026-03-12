@@ -89,7 +89,7 @@ fi
 rm -rf "$VENV_DIR"
 
 for launcher in "$LOCAL_BIN_DIR/o2switch-cli" "$LOCAL_BIN_DIR/o2switch_cli"; do
-  if [[ -L "$launcher" ]]; then
+  if [[ -e "$launcher" || -L "$launcher" ]]; then
     rm -f "$launcher"
   fi
 done
@@ -103,3 +103,8 @@ if [[ "$REMOVE_STATE" -eq 1 ]]; then
 fi
 
 echo "==> Uninstall completed"
+echo
+echo "Shell note:"
+echo "  If your current shell still resolves an old launcher path, run:"
+echo "  hash -r"
+echo "  or open a new shell session."

@@ -35,6 +35,9 @@ Standalone uninstall:
 ./uninstall.sh --purge-config --purge-state
 ```
 
+Apres desinstallation, le shell courant peut encore garder l'ancien chemin du binaire en cache.
+Dans ce cas, lancez `hash -r` ou ouvrez un nouveau terminal.
+
 ## Configuration
 
 Convention de nommage:
