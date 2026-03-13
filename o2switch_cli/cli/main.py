@@ -9,6 +9,7 @@ from o2switch_cli.cli.config_cmd import app as config_app
 from o2switch_cli.cli.context import build_context
 from o2switch_cli.cli.dns import app as dns_app
 from o2switch_cli.cli.domains import app as domains_app
+from o2switch_cli.cli.helpers import run_guarded
 from o2switch_cli.cli.interactive import run_interactive_menu
 from o2switch_cli.cli.subdomains import app as subdomains_app
 from o2switch_cli.config.settings import load_settings
@@ -52,7 +53,7 @@ def main(
 
     if ctx.invoked_subcommand is None and not ctx.resilient_parsing:
         if sys.stdin.isatty():
-            run_interactive_menu(app_context)
+            run_guarded(ctx, lambda active_context: run_interactive_menu(active_context))
             raise typer.Exit()
         typer.echo(ctx.get_help())
         raise typer.Exit()
@@ -60,8 +61,7 @@ def main(
 
 @app.command("interactive")
 def interactive(ctx: typer.Context) -> None:
-    app_context = ctx.obj
-    run_interactive_menu(app_context)
+    run_guarded(ctx, run_interactive_menu)
 
 
 def run() -> None:

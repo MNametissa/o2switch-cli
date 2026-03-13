@@ -56,6 +56,8 @@ def test_fqdn_and_docroot_helpers() -> None:
     assert fqdn_for_label("odoo", "ginutech.com") == "odoo.ginutech.com"
     assert normalize_docroot("public_html/odoo", "odoo") == "/public_html/odoo"
     assert canonical_record_name("odoo", "ginutech.com") == "odoo.ginutech.com"
+    assert canonical_record_name("_dmarc", "ginutech.com") == "_dmarc.ginutech.com"
+    assert canonical_record_name("@", "ginutech.com") == "ginutech.com"
     assert relative_name("odoo.ginutech.com", "ginutech.com") == "odoo"
 
 

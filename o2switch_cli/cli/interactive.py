@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import questionary
 
 from o2switch_cli.cli.context import AppContext
+from o2switch_cli.cli.helpers import run_guarded_interactive
 from o2switch_cli.cli.interactive_support import (
     build_domain_suggestions,
     build_hostname_suggestions,
@@ -88,151 +89,156 @@ def run_interactive_menu(app_context: AppContext) -> None:
 
         if choice == "Exit" or choice is None:
             return
-        if choice == "Domains: list":
-            domains = cache.get_domains(app_context, ui)
-            ui.browse_pages(
-                domains,
-                page_size=_page_size(ui),
-                empty_message="No account domains are currently available.",
-                render_page=lambda page_items, window: ui.print_domains(page_items, window),
-            )
-        elif choice == "Domains: search":
-            domains = cache.get_domains(app_context, ui)
-            term = ui.prompt_realtime_search(
-                "Search domains",
-                suggestions=build_domain_suggestions(domains),
-                help_text="Realtime domain matches update while you type",
-            )
-            matches = filter_domains(domains, term)
-            ui.browse_pages(
-                matches,
-                page_size=_page_size(ui),
-                empty_message="No domains matched the search term.",
-                render_page=lambda page_items, window: ui.print_domains(page_items, window),
-            )
-        elif choice == "DNS: search":
-            results = cache.get_dns_index(app_context, ui)
-            term = ui.prompt_realtime_search(
-                "Search hostnames, IPs, or zones",
-                suggestions=build_hostname_suggestions(results),
-                help_text="Realtime DNS and hosted matches update while you type",
-            )
-            matches = filter_hostname_results(results, term)
-            if not matches and term.strip():
-                with ui.status("Checking live hostname availability", spinner="earth"):
-                    matches = app_context.runtime().dns.search(term)
-            ui.browse_pages(
-                matches,
-                page_size=_page_size(ui),
-                empty_message="No DNS or hosted results matched the search term.",
-                render_page=lambda page_items, window: ui.print_hostname_search_results(page_items, window),
-            )
-        elif choice == "DNS: upsert A record":
-            host = questionary.text("Hostname").ask() or ""
-            ip = questionary.text("IPv4 target").ask() or ""
-            ttl_text = questionary.text("TTL", default=str(app_context.settings.default_ttl)).ask() or str(
-                app_context.settings.default_ttl
-            )
-            with ui.status("Inspecting DNS state", spinner="dots12"):
-                zone, _, _, plan = app_context.runtime().dns.plan_upsert_a_record(
-                    host, ip, int(ttl_text), force=app_context.force
+        def action(active_context: AppContext, selected_choice: str = choice) -> None:
+            if selected_choice == "Domains: list":
+                domains = cache.get_domains(active_context, ui)
+                ui.browse_pages(
+                    domains,
+                    page_size=_page_size(ui),
+                    empty_message="No account domains are currently available.",
+                    render_page=lambda page_items, window: ui.print_domains(page_items, window),
                 )
-            ui.print_plan(plan, zone=zone)
-            if app_context.yes or ui.confirm("Apply this change?"):
-                with ui.status("Applying DNS mutation", spinner="aesthetic"):
-                    _, result = app_context.runtime().dns.upsert_a_record(
-                        host,
-                        ip,
-                        int(ttl_text),
-                        dry_run=app_context.dry_run,
-                        force=app_context.force,
-                        verify=app_context.verify_after_mutation,
-                    )
-                ui.print_result(result)
-                cache.invalidate(dns=True)
-        elif choice == "DNS: delete A record":
-            host = questionary.text("Hostname").ask() or ""
-            with ui.status("Inspecting DNS state", spinner="dots12"):
-                zone, _, _, plan = app_context.runtime().dns.plan_delete_a_record(host, force=app_context.force)
-            ui.print_plan(plan, zone=zone)
-            if app_context.yes or ui.confirm("Delete this record?"):
-                with ui.status("Deleting DNS record", spinner="aesthetic"):
-                    _, result = app_context.runtime().dns.delete_a_record(
-                        host,
-                        dry_run=app_context.dry_run,
-                        force=app_context.force,
-                        verify=app_context.verify_after_mutation,
-                    )
-                ui.print_result(result)
-                cache.invalidate(dns=True)
-        elif choice == "DNS: verify":
-            host = questionary.text("Hostname").ask() or ""
-            with ui.status("Resolving DNS", spinner="dots12"):
-                result = app_context.runtime().dns.verify_record(host)
-            ui.print_result(result)
-        elif choice == "Subdomains: search":
-            subdomains = cache.get_subdomains(app_context, ui)
-            term = ui.prompt_realtime_search(
-                "Search hosted subdomains",
-                suggestions=build_subdomain_suggestions(subdomains),
-                help_text="Realtime hosted subdomain matches update while you type",
-            )
-            matches = filter_subdomains(subdomains, term)
-            ui.browse_pages(
-                matches,
-                page_size=_page_size(ui),
-                empty_message="No hosted subdomains matched the search term.",
-                render_page=lambda page_items, window: ui.print_subdomains(page_items, window),
-            )
-        elif choice == "Subdomains: create":
-            root = questionary.text("Root domain").ask() or ""
-            label = questionary.text("Label").ask() or ""
-            docroot = questionary.text("Docroot", default=f"/public_html/{label or 'app'}").ask()
-            ip = questionary.text("IPv4 target (optional)").ask() or None
-            ttl_text = questionary.text("TTL", default=str(app_context.settings.default_ttl)).ask() or str(
-                app_context.settings.default_ttl
-            )
-            with ui.status("Inspecting hosted subdomain state", spinner="dots12"):
-                zone, _, _, plan = app_context.runtime().subdomains.plan_create(
-                    root_domain=root, label=label, docroot=docroot, ip=ip
+            elif selected_choice == "Domains: search":
+                domains = cache.get_domains(active_context, ui)
+                term = ui.prompt_realtime_search(
+                    "Search domains",
+                    suggestions=build_domain_suggestions(domains),
+                    help_text="Realtime domain matches update while you type",
                 )
-            ui.print_plan(plan, zone=zone)
-            if app_context.yes or ui.confirm("Create this hosted subdomain?"):
-                with ui.status("Provisioning hosted subdomain", spinner="aesthetic"):
-                    result = app_context.runtime().subdomains.create(
-                        root_domain=root,
-                        label=label,
-                        docroot=docroot,
-                        ip=ip,
-                        ttl=int(ttl_text),
-                        dry_run=app_context.dry_run,
-                        force=app_context.force,
-                        verify=app_context.verify_after_mutation,
+                matches = filter_domains(domains, term)
+                ui.browse_pages(
+                    matches,
+                    page_size=_page_size(ui),
+                    empty_message="No domains matched the search term.",
+                    render_page=lambda page_items, window: ui.print_domains(page_items, window),
+                )
+            elif selected_choice == "DNS: search":
+                results = cache.get_dns_index(active_context, ui)
+                term = ui.prompt_realtime_search(
+                    "Search hostnames, IPs, or zones",
+                    suggestions=build_hostname_suggestions(results),
+                    help_text="Realtime DNS and hosted matches update while you type",
+                )
+                matches = filter_hostname_results(results, term)
+                if not matches and term.strip():
+                    with ui.status("Checking live hostname availability", spinner="earth"):
+                        matches = active_context.runtime().dns.search(term)
+                ui.browse_pages(
+                    matches,
+                    page_size=_page_size(ui),
+                    empty_message="No DNS or hosted results matched the search term.",
+                    render_page=lambda page_items, window: ui.print_hostname_search_results(page_items, window),
+                )
+            elif selected_choice == "DNS: upsert A record":
+                host = questionary.text("Hostname").ask() or ""
+                ip = questionary.text("IPv4 target").ask() or ""
+                ttl_text = questionary.text("TTL", default=str(active_context.settings.default_ttl)).ask() or str(
+                    active_context.settings.default_ttl
+                )
+                with ui.status("Inspecting DNS state", spinner="dots12"):
+                    zone, _, _, plan = active_context.runtime().dns.plan_upsert_a_record(
+                        host, ip, int(ttl_text), force=active_context.force
                     )
+                ui.print_plan(plan, zone=zone)
+                if active_context.yes or ui.confirm("Apply this change?"):
+                    with ui.status("Applying DNS mutation", spinner="aesthetic"):
+                        _, result = active_context.runtime().dns.upsert_a_record(
+                            host,
+                            ip,
+                            int(ttl_text),
+                            dry_run=active_context.dry_run,
+                            force=active_context.force,
+                            verify=active_context.verify_after_mutation,
+                        )
+                    ui.print_result(result)
+                    cache.invalidate(dns=True)
+            elif selected_choice == "DNS: delete A record":
+                host = questionary.text("Hostname").ask() or ""
+                with ui.status("Inspecting DNS state", spinner="dots12"):
+                    zone, _, _, plan = active_context.runtime().dns.plan_delete_a_record(
+                        host, force=active_context.force
+                    )
+                ui.print_plan(plan, zone=zone)
+                if active_context.yes or ui.confirm("Delete this record?"):
+                    with ui.status("Deleting DNS record", spinner="aesthetic"):
+                        _, result = active_context.runtime().dns.delete_a_record(
+                            host,
+                            dry_run=active_context.dry_run,
+                            force=active_context.force,
+                            verify=active_context.verify_after_mutation,
+                        )
+                    ui.print_result(result)
+                    cache.invalidate(dns=True)
+            elif selected_choice == "DNS: verify":
+                host = questionary.text("Hostname").ask() or ""
+                with ui.status("Resolving DNS", spinner="dots12"):
+                    result = active_context.runtime().dns.verify_record(host)
                 ui.print_result(result)
-                cache.invalidate(domains=True, dns=True, subdomains=True)
-        elif choice == "Subdomains: delete":
-            fqdn = questionary.text("Hosted subdomain FQDN").ask() or ""
-            with ui.status("Inspecting hosted subdomain state", spinner="dots12"):
-                zone, _, plan = app_context.runtime().subdomains.plan_delete(fqdn)
-            ui.print_plan(plan, zone=zone)
-            if app_context.yes or ui.confirm("Delete this hosted subdomain?"):
-                with ui.status("Deleting hosted subdomain", spinner="aesthetic"):
-                    result = app_context.runtime().subdomains.delete(fqdn, dry_run=app_context.dry_run)
-                ui.print_result(result)
-                cache.invalidate(domains=True, dns=True, subdomains=True)
-        elif choice == "Config: show":
-            from o2switch_cli.config.settings import settings_summary
+            elif selected_choice == "Subdomains: search":
+                subdomains = cache.get_subdomains(active_context, ui)
+                term = ui.prompt_realtime_search(
+                    "Search hosted subdomains",
+                    suggestions=build_subdomain_suggestions(subdomains),
+                    help_text="Realtime hosted subdomain matches update while you type",
+                )
+                matches = filter_subdomains(subdomains, term)
+                ui.browse_pages(
+                    matches,
+                    page_size=_page_size(ui),
+                    empty_message="No hosted subdomains matched the search term.",
+                    render_page=lambda page_items, window: ui.print_subdomains(page_items, window),
+                )
+            elif selected_choice == "Subdomains: create":
+                root = questionary.text("Root domain").ask() or ""
+                label = questionary.text("Label").ask() or ""
+                docroot = questionary.text("Docroot", default=f"/public_html/{label or 'app'}").ask()
+                ip = questionary.text("IPv4 target (optional)").ask() or None
+                ttl_text = questionary.text("TTL", default=str(active_context.settings.default_ttl)).ask() or str(
+                    active_context.settings.default_ttl
+                )
+                with ui.status("Inspecting hosted subdomain state", spinner="dots12"):
+                    zone, _, _, plan = active_context.runtime().subdomains.plan_create(
+                        root_domain=root, label=label, docroot=docroot, ip=ip
+                    )
+                ui.print_plan(plan, zone=zone)
+                if active_context.yes or ui.confirm("Create this hosted subdomain?"):
+                    with ui.status("Provisioning hosted subdomain", spinner="aesthetic"):
+                        result = active_context.runtime().subdomains.create(
+                            root_domain=root,
+                            label=label,
+                            docroot=docroot,
+                            ip=ip,
+                            ttl=int(ttl_text),
+                            dry_run=active_context.dry_run,
+                            force=active_context.force,
+                            verify=active_context.verify_after_mutation,
+                        )
+                    ui.print_result(result)
+                    cache.invalidate(domains=True, dns=True, subdomains=True)
+            elif selected_choice == "Subdomains: delete":
+                fqdn = questionary.text("Hosted subdomain FQDN").ask() or ""
+                with ui.status("Inspecting hosted subdomain state", spinner="dots12"):
+                    zone, _, plan = active_context.runtime().subdomains.plan_delete(fqdn)
+                ui.print_plan(plan, zone=zone)
+                if active_context.yes or ui.confirm("Delete this hosted subdomain?"):
+                    with ui.status("Deleting hosted subdomain", spinner="aesthetic"):
+                        result = active_context.runtime().subdomains.delete(fqdn, dry_run=active_context.dry_run)
+                    ui.print_result(result)
+                    cache.invalidate(domains=True, dns=True, subdomains=True)
+            elif selected_choice == "Config: show":
+                from o2switch_cli.config.settings import settings_summary
 
-            ui.print_mapping("Active Configuration", settings_summary(app_context.settings))
-        elif choice == "Config: test":
-            with ui.status("Testing API access", spinner="dots12"):
-                domains = app_context.runtime().domains.list_domains()
-            ui.print_mapping(
-                "API Access",
-                {
-                    "cpanel_host": app_context.settings.cpanel_host,
-                    "cpanel_user": app_context.settings.cpanel_user,
-                    "reachable_domains": len(domains),
-                },
-            )
+                ui.print_mapping("Active Configuration", settings_summary(active_context.settings))
+            elif selected_choice == "Config: test":
+                with ui.status("Testing API access", spinner="dots12"):
+                    domains = active_context.runtime().domains.list_domains()
+                ui.print_mapping(
+                    "API Access",
+                    {
+                        "cpanel_host": active_context.settings.cpanel_host,
+                        "cpanel_user": active_context.settings.cpanel_user,
+                        "reachable_domains": len(domains),
+                    },
+                )
+
+        run_guarded_interactive(app_context, action)

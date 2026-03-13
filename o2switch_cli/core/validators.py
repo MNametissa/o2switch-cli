@@ -111,9 +111,9 @@ def validate_reserved_hostname(hostname: str, root_domain: str, reserved_labels:
 
 
 def canonical_record_name(name: str, zone: str) -> str:
-    candidate = normalize_hostname(name)
+    candidate = name.strip().lower().rstrip(".")
     normalised_zone = normalize_hostname(zone)
-    if candidate == "@":
+    if not candidate or candidate == "@":
         return normalised_zone
     if candidate == normalised_zone or candidate.endswith(f".{normalised_zone}"):
         return candidate

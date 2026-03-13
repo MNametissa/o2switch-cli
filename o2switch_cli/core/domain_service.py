@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from o2switch_cli.core.cpanel_client import CpanelClient
+from o2switch_cli.core.errors import NotFoundAppError
 from o2switch_cli.core.models import DomainDescriptor, DomainType
 from o2switch_cli.core.validators import normalize_hostname, select_root_domain
 
@@ -47,6 +48,13 @@ class DomainService:
     def search(self, term: str) -> list[DomainDescriptor]:
         needle = term.strip().lower()
         return [item for item in self.list_domains() if needle in item.domain]
+
+    def get_domain_descriptor(self, domain: str, operation: str) -> DomainDescriptor:
+        target = normalize_hostname(domain)
+        for item in self.list_domains():
+            if item.domain == target:
+                return item
+        raise NotFoundAppError(operation, "Root domain was not found on the account.", target)
 
     def resolve_root_domain(self, hostname: str, operation: str) -> str:
         return select_root_domain(hostname, self.root_domains(), operation)

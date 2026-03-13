@@ -5,6 +5,7 @@ import json
 from typer.testing import CliRunner
 
 from o2switch_cli.cli.main import app
+from o2switch_cli.core.errors import TransportAppError
 from o2switch_cli.core.models import (
     DomainDescriptor,
     DomainType,
@@ -221,3 +222,23 @@ def test_dns_verify_mismatch_returns_warning_exit_code(monkeypatch) -> None:
     monkeypatch.setattr("o2switch_cli.cli.context.AppContext.runtime", lambda self: FakeRuntime())
     result = runner.invoke(app, ["--json", "dns", "verify", "--host", "odoo.ginutech.com"])
     assert result.exit_code == 7
+
+
+def test_interactive_command_renders_guarded_error(monkeypatch) -> None:
+    def boom(app_context):
+        raise TransportAppError("runtime", "interactive exploded")
+
+    monkeypatch.setattr("o2switch_cli.cli.main.run_interactive_menu", boom)
+    result = runner.invoke(
+        app,
+        ["--json", "interactive"],
+        env={
+            "O2SWITCH_CLI_CPANEL_HOST": "cpanel.example.test",
+            "O2SWITCH_CLI_CPANEL_USER": "demo",
+            "O2SWITCH_CLI_CPANEL_TOKEN": "secret-token",
+        },
+    )
+    payload = json.loads(result.output)
+    assert result.exit_code == 6
+    assert payload["error_class"] == "transport"
+    assert payload["message"] == "interactive exploded"

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import binascii
+
 from o2switch_cli.core.audit import AuditService
 from o2switch_cli.core.cpanel_client import CpanelClient
 from o2switch_cli.core.domain_service import DomainService
@@ -45,6 +48,50 @@ class DNSService:
         raw_value = record.record_id or record.raw.get("line_index") or record.raw.get("line")
         return int(raw_value)
 
+    @staticmethod
+    def _decode_b64_text(value: object) -> str | None:
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            decoded = base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError):
+            return None
+        try:
+            return decoded.decode("utf-8")
+        except UnicodeDecodeError:
+            return decoded.decode("utf-8", errors="replace")
+
+    @classmethod
+    def _record_values(cls, item: dict[str, object]) -> list[str]:
+        data = item.get("data")
+        if isinstance(data, list):
+            return [str(value) for value in data]
+        if data not in (None, ""):
+            return [str(data)]
+
+        data_b64 = item.get("data_b64")
+        if isinstance(data_b64, list):
+            return [decoded for value in data_b64 if (decoded := cls._decode_b64_text(value)) is not None]
+        if decoded := cls._decode_b64_text(data_b64):
+            return [decoded]
+        return []
+
+    @classmethod
+    def _record_name(cls, item: dict[str, object], root_domain: str) -> str:
+        raw_name = item.get("dname") or item.get("name") or item.get("domain")
+        if raw_name in (None, ""):
+            raw_name = cls._decode_b64_text(item.get("dname_b64")) or root_domain
+        return canonical_record_name(str(raw_name), root_domain)
+
+    @staticmethod
+    def _require_serial(operation: str, root_domain: str, serial: int | None) -> int:
+        if serial is None:
+            raise TransportAppError(
+                operation,
+                f"Could not determine the current DNS serial for zone {root_domain}.",
+            )
+        return serial
+
     def _zone_state(self, root_domain: str) -> tuple[list[DNSRecord], int | None]:
         result = self._client.parse_zone(root_domain)
         payload = result.data or {}
@@ -64,13 +111,7 @@ class DNSService:
             if not isinstance(item, dict):
                 continue
             record_type = str(item.get("record_type") or item.get("type") or "").upper()
-            data = item.get("data")
-            if isinstance(data, list):
-                values = [str(value) for value in data]
-            elif data is None:
-                values = []
-            else:
-                values = [str(data)]
+            values = self._record_values(item)
             value = (
                 item.get("address")
                 or item.get("target")
@@ -80,10 +121,7 @@ class DNSService:
             )
             ttl = item.get("ttl")
             record_id = item.get("line_index") or item.get("line") or item.get("record_id") or item.get("id")
-            name = canonical_record_name(
-                str(item.get("dname") or item.get("name") or item.get("domain") or root_domain),
-                root_domain,
-            )
+            name = self._record_name(item, root_domain)
             records.append(
                 DNSRecord(
                     name=name,
@@ -106,15 +144,10 @@ class DNSService:
         for record in records:
             if record.type != "SOA":
                 continue
-            values = record.raw.get("data", [])
-            if isinstance(values, list):
-                for value in values:
-                    if str(value).isdigit() and len(str(value)) >= 8:
-                        return int(value)
-            elif isinstance(values, str):
-                for part in values.split():
-                    if part.isdigit() and len(part) >= 8:
-                        return int(part)
+            values = DNSService._record_values(record.raw)
+            for value in values:
+                if str(value).isdigit() and len(str(value)) >= 8:
+                    return int(value)
         return None
 
     def get_zone_state(self, root_domain: str) -> list[DNSRecord]:
@@ -318,6 +351,7 @@ class DNSService:
         applied = False
         action = "dry-run" if dry_run else "created"
         if not dry_run:
+            serial = self._require_serial("dns_upsert", root_domain, serial)
             add = None
             edit = None
             remove = None
@@ -407,6 +441,7 @@ class DNSService:
         hostname = normalize_hostname(fqdn)
         root_domain, serial, matches, plan = self.plan_delete_a_record(hostname, force=force)
         if not dry_run:
+            serial = self._require_serial("dns_delete", root_domain, serial)
             remove = [self._line_index(record) for record in matches]
             self._client.mass_edit_zone(zone=root_domain, serial=serial, remove=remove)
         verification = VerificationStatus.SKIPPED

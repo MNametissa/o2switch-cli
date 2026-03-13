@@ -11,6 +11,7 @@ from o2switch_cli.core.errors import (
     TransportAppError,
 )
 from o2switch_cli.core.models import (
+    DomainType,
     MutationPlan,
     OperationMode,
     OperationResult,
@@ -39,6 +40,13 @@ class SubdomainService:
         self._dns = dns
         self._audit = audit
         self._reserved_labels = reserved_labels
+
+    def _delete_domain_argument(self, hostname: str, root_domain: str) -> str:
+        descriptor = self._domains.get_domain_descriptor(root_domain, "subdomain_delete")
+        if descriptor.type is DomainType.ADDON:
+            label = hostname[: -(len(root_domain) + 1)]
+            return f"{label}_{root_domain}"
+        return hostname
 
     def search(self, term: str) -> list[SubdomainDescriptor]:
         needle = term.strip().lower()
@@ -188,7 +196,8 @@ class SubdomainService:
         root_domain, label, plan = self.plan_delete(hostname)
         if not dry_run:
             try:
-                self._client.delete_subdomain(domain=label, rootdomain=root_domain)
+                delete_domain = self._delete_domain_argument(hostname, root_domain)
+                self._client.delete_subdomain(domain=delete_domain)
             except TransportAppError as exc:
                 if self._looks_like_unsupported_delete(str(exc)):
                     raise NotSupportedAppError(

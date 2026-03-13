@@ -71,12 +71,33 @@ class CpanelClient:
         event = result.get("event", {})
         if event and event.get("result") not in (1, "1"):
             raise TransportAppError(operation, event.get("reason", f"{operation} failed."))
+        data = result.get("data")
+        if isinstance(data, dict):
+            detail = self._api2_failure_detail(data, operation)
+            if detail:
+                raise TransportAppError(operation, detail)
+        elif isinstance(data, list):
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                detail = self._api2_failure_detail(item, operation)
+                if detail:
+                    raise TransportAppError(operation, detail)
         return ApiResult(
-            data=result.get("data"),
+            data=data,
             metadata=result.get("metadata", {}) or {},
             warnings=result.get("warnings", []) or [],
             messages=result.get("messages", []) or [],
         )
+
+    @staticmethod
+    def _api2_failure_detail(payload: dict[str, Any], operation: str) -> str | None:
+        if "result" not in payload:
+            return None
+        if payload.get("result") in (1, "1", True):
+            return None
+        detail = payload.get("reason") or payload.get("statusmsg") or payload.get("error") or f"{operation} failed."
+        return str(detail)
 
     def uapi(self, module: str, function: str, **params: Any) -> ApiResult:
         payload = self._request("GET", f"/execute/{module}/{function}", params=params)
@@ -128,8 +149,8 @@ class CpanelClient:
     def list_subdomains(self) -> ApiResult:
         return self.api2("SubDomain", "listsubdomains")
 
-    def delete_subdomain(self, *, domain: str, rootdomain: str) -> ApiResult:
-        return self.api2("SubDomain", "delsubdomain", domain=domain, rootdomain=rootdomain)
+    def delete_subdomain(self, *, domain: str) -> ApiResult:
+        return self.api2("SubDomain", "delsubdomain", domain=domain)
 
     def test_access(self) -> ApiResult:
         return self.list_domains()

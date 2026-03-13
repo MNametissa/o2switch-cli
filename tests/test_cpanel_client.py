@@ -7,7 +7,7 @@ from pydantic import SecretStr
 
 from o2switch_cli.config.settings import AppSettings
 from o2switch_cli.core.cpanel_client import CpanelClient
-from o2switch_cli.core.errors import AuthAppError
+from o2switch_cli.core.errors import AuthAppError, TransportAppError
 
 
 def build_settings() -> AppSettings:
@@ -44,6 +44,40 @@ def test_api2_request_includes_expected_query_params() -> None:
     client = httpx.Client(base_url="https://cpanel.example.test:2083", transport=httpx.MockTransport(handler))
     response = CpanelClient(build_settings(), client=client).list_subdomains()
     assert response.data[0]["domain"] == "app.ginutech.com"
+
+
+def test_delete_subdomain_uses_single_domain_argument() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        params = dict(request.url.params)
+        assert params["cpanel_jsonapi_module"] == "SubDomain"
+        assert params["cpanel_jsonapi_func"] == "delsubdomain"
+        assert params["domain"] == "app_blog.example.com"
+        assert "rootdomain" not in params
+        return httpx.Response(
+            200,
+            json={"cpanelresult": {"event": {"result": 1}, "data": [{"result": 1, "reason": "ok"}]}},
+        )
+
+    client = httpx.Client(base_url="https://cpanel.example.test:2083", transport=httpx.MockTransport(handler))
+    response = CpanelClient(build_settings(), client=client).delete_subdomain(domain="app_blog.example.com")
+    assert response.data[0]["result"] == 1
+
+
+def test_api2_function_level_failure_raises_transport_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"cpanelresult": {"event": {"result": 1}, "data": [{"result": 0, "reason": "delete failed"}]}},
+        )
+
+    client = httpx.Client(base_url="https://cpanel.example.test:2083", transport=httpx.MockTransport(handler))
+    api = CpanelClient(build_settings(), client=client)
+    try:
+        api.delete_subdomain(domain="app_blog.example.com")
+    except TransportAppError as error:
+        assert "delete failed" in error.message
+        return
+    raise AssertionError("Expected TransportAppError")
 
 
 def test_mass_edit_zone_serializes_operations() -> None:

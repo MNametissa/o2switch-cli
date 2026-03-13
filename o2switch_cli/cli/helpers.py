@@ -13,17 +13,34 @@ from o2switch_cli.core.models import MutationPlan, OperationResult, PlannedActio
 T = TypeVar("T")
 
 
-def run_guarded(ctx: typer.Context, action: Callable[[AppContext], T]) -> T:
-    app_context = get_app_context(ctx)
+def _execute_guarded(app_context: AppContext, action: Callable[[AppContext], T]) -> T:
     try:
         return action(app_context)
     except CliAppError as error:
-        raise_for_error(app_context, error)
+        raise error
     except typer.Exit:
         raise
     except Exception as error:  # pragma: no cover
-        raise_for_error(app_context, TransportAppError("runtime", str(error)))
+        raise TransportAppError("runtime", str(error)) from error
     raise RuntimeError("unreachable")
+
+
+def run_guarded(ctx: typer.Context, action: Callable[[AppContext], T]) -> T:
+    app_context = get_app_context(ctx)
+    try:
+        return _execute_guarded(app_context, action)
+    except CliAppError as error:
+        raise_for_error(app_context, error)
+    raise RuntimeError("unreachable")
+
+
+def run_guarded_interactive(app_context: AppContext, action: Callable[[AppContext], T]) -> T | None:
+    ui = TerminalUI(app_context.console, app_context.output_format)
+    try:
+        return _execute_guarded(app_context, action)
+    except CliAppError as error:
+        ui.print_error(error.to_envelope())
+        return None
 
 
 def confirm_plan(app_context: AppContext, ui: TerminalUI, plan: MutationPlan, *, zone: str | None = None) -> bool:

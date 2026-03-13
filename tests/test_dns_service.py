@@ -1,18 +1,27 @@
 from __future__ import annotations
 
+import base64
+
 import pytest
 
 from o2switch_cli.core.audit import AuditService
 from o2switch_cli.core.dns_service import DNSService
 from o2switch_cli.core.domain_service import DomainService
-from o2switch_cli.core.errors import ConflictAppError, ValidationAppError
+from o2switch_cli.core.errors import ConflictAppError, TransportAppError, ValidationAppError
 from o2switch_cli.core.models import ApiResult, SearchCategory, VerificationStatus
 
 
 class FakeClient:
-    def __init__(self, entries: list[dict], hosted: list[dict] | None = None) -> None:
+    def __init__(
+        self,
+        entries: list[dict],
+        hosted: list[dict] | None = None,
+        *,
+        serial: int | None = 2026031201,
+    ) -> None:
         self.entries = entries
         self.hosted = hosted or []
+        self.serial = serial
         self.mass_edit_calls: list[dict] = []
 
     def list_domains(self) -> ApiResult:
@@ -20,7 +29,8 @@ class FakeClient:
 
     def parse_zone(self, zone: str) -> ApiResult:
         assert zone == "ginutech.com"
-        return ApiResult(data={"entries": self.entries}, metadata={"serial": 2026031201})
+        metadata = {"serial": self.serial} if self.serial is not None else {}
+        return ApiResult(data={"entries": self.entries}, metadata=metadata)
 
     def mass_edit_zone(self, **kwargs) -> ApiResult:
         self.mass_edit_calls.append(kwargs)
@@ -35,11 +45,20 @@ class FakeResolver:
         return VerificationStatus.RESOLVED_MATCHES_TARGET, [expected_ip] if expected_ip else []
 
 
-def build_service(entries: list[dict], hosted: list[dict] | None = None) -> tuple[FakeClient, DNSService]:
-    client = FakeClient(entries, hosted=hosted)
+def build_service(
+    entries: list[dict],
+    hosted: list[dict] | None = None,
+    *,
+    serial: int | None = 2026031201,
+) -> tuple[FakeClient, DNSService]:
+    client = FakeClient(entries, hosted=hosted, serial=serial)
     domains = DomainService(client)  # type: ignore[arg-type]
     service = DNSService(client, domains, FakeResolver(), AuditService(), ["www", "mail"])  # type: ignore[arg-type]
     return client, service
+
+
+def b64(value: str) -> str:
+    return base64.b64encode(value.encode("utf-8")).decode("ascii")
 
 
 def test_upsert_returns_noop_when_record_matches() -> None:
@@ -88,6 +107,19 @@ def test_upsert_rejects_reserved_direct_hostname() -> None:
         service.plan_upsert_a_record("mail.ginutech.com", "203.0.113.25", 300, force=False)
 
 
+def test_upsert_refuses_live_write_when_zone_serial_is_missing() -> None:
+    _, service = build_service([], serial=None)
+    with pytest.raises(TransportAppError):
+        service.upsert_a_record(
+            "odoo.ginutech.com",
+            "203.0.113.25",
+            300,
+            dry_run=False,
+            force=False,
+            verify=False,
+        )
+
+
 def test_upsert_force_normalizes_multiple_records_to_single_add() -> None:
     client, service = build_service(
         [
@@ -107,6 +139,58 @@ def test_upsert_force_normalizes_multiple_records_to_single_add() -> None:
     assert result.action == "updated"
     assert client.mass_edit_calls[0]["remove"] == [1, 2]
     assert client.mass_edit_calls[0]["add"][0]["data"] == ["203.0.113.99"]
+
+
+def test_upsert_extracts_serial_from_base64_soa_record() -> None:
+    client, service = build_service(
+        [
+            {
+                "dname_b64": b64("ginutech.com."),
+                "record_type": "SOA",
+                "data_b64": [
+                    b64("ns1.o2switch.net."),
+                    b64("sysadmin.o2switch.fr."),
+                    b64("2026031100"),
+                    b64("3600"),
+                    b64("1800"),
+                    b64("1209600"),
+                    b64("86400"),
+                ],
+                "ttl": 86400,
+                "line_index": 3,
+            }
+        ],
+        serial=None,
+    )
+    _, result = service.upsert_a_record(
+        "odoo.ginutech.com",
+        "203.0.113.25",
+        300,
+        dry_run=False,
+        force=False,
+        verify=False,
+    )
+    assert result.action == "created"
+    assert client.mass_edit_calls[0]["serial"] == 2026031100
+
+
+def test_find_records_decodes_base64_zone_entries() -> None:
+    _, service = build_service(
+        [
+            {
+                "dname_b64": b64("odoo.ginutech.com."),
+                "record_type": "A",
+                "data_b64": [b64("203.0.113.25")],
+                "ttl": 300,
+                "line_index": 7,
+            }
+        ],
+        serial=None,
+    )
+    matches = service.find_records("odoo.ginutech.com")
+    assert len(matches) == 1
+    assert matches[0].name == "odoo.ginutech.com"
+    assert matches[0].value == "203.0.113.25"
 
 
 def test_delete_rejects_ambiguous_records_without_force() -> None:
@@ -158,3 +242,12 @@ def test_forced_upsert_normalizes_multiple_records_into_one() -> None:
     assert result.action == "updated"
     assert client.mass_edit_calls[0]["remove"][0] == 1
     assert client.mass_edit_calls[0]["add"][0]["data"] == ["203.0.113.30"]
+
+
+def test_delete_refuses_live_write_when_zone_serial_is_missing() -> None:
+    _, service = build_service(
+        [{"dname": "odoo", "record_type": "A", "address": "203.0.113.25", "ttl": 300, "line_index": 1}],
+        serial=None,
+    )
+    with pytest.raises(TransportAppError):
+        service.delete_a_record("odoo.ginutech.com", dry_run=False, force=False, verify=False)
