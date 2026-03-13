@@ -267,6 +267,25 @@ def test_find_records_decodes_base64_zone_entries() -> None:
     assert matches[0].value == "203.0.113.25"
 
 
+def test_find_records_treats_non_trailing_dot_names_as_relative_zone_tokens() -> None:
+    _, service = build_service(
+        [
+            {
+                "dname_b64": b64("name.ginutech.com"),
+                "record_type": "A",
+                "data_b64": [b64("203.0.113.25")],
+                "ttl": 300,
+                "line_index": 9,
+            }
+        ],
+        serial=None,
+    )
+    assert service.find_records("name.ginutech.com") == []
+    malformed = service.find_records("name.ginutech.com.ginutech.com")
+    assert len(malformed) == 1
+    assert malformed[0].name == "name.ginutech.com.ginutech.com"
+
+
 def test_delete_rejects_ambiguous_records_without_force() -> None:
     _, service = build_service(
         [

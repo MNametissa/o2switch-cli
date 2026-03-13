@@ -83,7 +83,13 @@ class DNSService:
         raw_name = item.get("dname") or item.get("name") or item.get("domain")
         if raw_name in (None, ""):
             raw_name = cls._decode_b64_text(item.get("dname_b64")) or root_domain
-        return canonical_record_name(str(raw_name), root_domain)
+        token = str(raw_name).strip()
+        zone_name = normalize_hostname(root_domain)
+        if not token or token == "@":
+            return zone_name
+        if token.endswith("."):
+            return canonical_record_name(token, zone_name)
+        return f"{token.lower().rstrip('.')}.{zone_name}"
 
     @staticmethod
     def _require_serial(operation: str, root_domain: str, serial: int | None) -> int:
