@@ -140,6 +140,46 @@ def build_hostname_suggestions(results: Sequence[HostnameSearchResult]) -> list[
     return suggestions
 
 
+def build_dns_search_suggestions(
+    domains: Sequence[DomainDescriptor],
+    subdomains: Sequence[SubdomainDescriptor],
+) -> list[SearchSuggestion]:
+    seen: set[tuple[str, str]] = set()
+    suggestions: list[SearchSuggestion] = []
+
+    for item in domains:
+        meta = f"domain · {item.type.value}"
+        key = (item.domain, meta)
+        if key in seen:
+            continue
+        seen.add(key)
+        suggestions.append(
+            SearchSuggestion(
+                value=item.domain,
+                label=item.domain,
+                meta=meta,
+                search_blob=_search_blob([item.domain, item.type.value, "domain"]),
+            )
+        )
+
+    for item in subdomains:
+        meta = f"hosted · {item.root_domain}"
+        key = (item.fqdn, meta)
+        if key in seen:
+            continue
+        seen.add(key)
+        suggestions.append(
+            SearchSuggestion(
+                value=item.fqdn,
+                label=item.fqdn,
+                meta=meta,
+                search_blob=_search_blob([item.fqdn, item.label, item.root_domain, item.docroot, "hosted"]),
+            )
+        )
+
+    return suggestions
+
+
 def build_subdomain_suggestions(subdomains: Sequence[SubdomainDescriptor]) -> list[SearchSuggestion]:
     return [
         SearchSuggestion(

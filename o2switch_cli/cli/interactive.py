@@ -7,15 +7,14 @@ import questionary
 from o2switch_cli.cli.context import AppContext
 from o2switch_cli.cli.helpers import run_guarded_interactive
 from o2switch_cli.cli.interactive_support import (
+    build_dns_search_suggestions,
     build_domain_suggestions,
-    build_hostname_suggestions,
     build_subdomain_suggestions,
     filter_domains,
-    filter_hostname_results,
     filter_subdomains,
 )
 from o2switch_cli.cli.ui import TerminalUI
-from o2switch_cli.core.models import DomainDescriptor, HostnameSearchResult, SubdomainDescriptor
+from o2switch_cli.core.models import DomainDescriptor, SubdomainDescriptor
 
 MIN_PAGE_SIZE = 6
 MAX_PAGE_SIZE = 12
@@ -24,7 +23,6 @@ MAX_PAGE_SIZE = 12
 @dataclass(slots=True)
 class InteractiveDataCache:
     domains: list[DomainDescriptor] | None = None
-    dns_index: list[HostnameSearchResult] | None = None
     subdomains: list[SubdomainDescriptor] | None = None
 
     def get_domains(self, app_context: AppContext, ui: TerminalUI) -> list[DomainDescriptor]:
@@ -32,12 +30,6 @@ class InteractiveDataCache:
             with ui.status("Syncing domain catalog", spinner="dots12"):
                 self.domains = app_context.runtime().domains.list_domains()
         return self.domains
-
-    def get_dns_index(self, app_context: AppContext, ui: TerminalUI) -> list[HostnameSearchResult]:
-        if self.dns_index is None:
-            with ui.status("Scanning hosted subdomains and DNS zones", spinner="dots12"):
-                self.dns_index = app_context.runtime().dns.search("")
-        return self.dns_index
 
     def get_subdomains(self, app_context: AppContext, ui: TerminalUI) -> list[SubdomainDescriptor]:
         if self.subdomains is None:
@@ -54,8 +46,6 @@ class InteractiveDataCache:
     ) -> None:
         if domains:
             self.domains = None
-        if dns:
-            self.dns_index = None
         if subdomains:
             self.subdomains = None
 
@@ -113,16 +103,18 @@ def run_interactive_menu(app_context: AppContext) -> None:
                     render_page=lambda page_items, window: ui.print_domains(page_items, window),
                 )
             elif selected_choice == "DNS: search":
-                results = cache.get_dns_index(active_context, ui)
+                domains = cache.get_domains(active_context, ui)
+                subdomains = cache.get_subdomains(active_context, ui)
                 term = ui.prompt_realtime_search(
                     "Search hostnames, IPs, or zones",
-                    suggestions=build_hostname_suggestions(results),
-                    help_text="Realtime DNS and hosted matches update while you type",
+                    suggestions=build_dns_search_suggestions(domains, subdomains),
+                    help_text="Suggestions update while you type; Enter runs the live DNS search",
                 )
-                matches = filter_hostname_results(results, term)
-                if not matches and term.strip():
-                    with ui.status("Checking live hostname availability", spinner="earth"):
-                        matches = active_context.runtime().dns.search(term)
+                if not term.strip():
+                    ui.print_info("Enter a hostname, IP, or zone to run a DNS search.")
+                    return
+                with ui.status("Searching hosted subdomains and DNS zones", spinner="dots12"):
+                    matches = active_context.runtime().dns.search(term)
                 ui.browse_pages(
                     matches,
                     page_size=_page_size(ui),

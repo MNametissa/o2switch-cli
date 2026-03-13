@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from o2switch_cli.cli.interactive_support import (
+    build_dns_search_suggestions,
     build_hostname_suggestions,
     filter_domains,
     filter_hostname_results,
@@ -11,6 +12,7 @@ from o2switch_cli.core.models import (
     DomainType,
     HostnameSearchResult,
     SearchCategory,
+    SubdomainDescriptor,
 )
 
 
@@ -73,3 +75,21 @@ def test_build_hostname_suggestions_deduplicates_repeat_rows() -> None:
     suggestions = build_hostname_suggestions(results)
     assert len(suggestions) == 1
     assert suggestions[0].value == "odoo.ginutech.com"
+
+
+def test_build_dns_search_suggestions_combines_domains_and_subdomains() -> None:
+    domains = [
+        DomainDescriptor(domain="ginutech.com", type=DomainType.ADDON),
+        DomainDescriptor(domain="ginutech.com", type=DomainType.ADDON),
+    ]
+    subdomains = [
+        SubdomainDescriptor(fqdn="app.ginutech.com", label="app", root_domain="ginutech.com"),
+        SubdomainDescriptor(fqdn="app.ginutech.com", label="app", root_domain="ginutech.com"),
+    ]
+
+    suggestions = build_dns_search_suggestions(domains, subdomains)
+
+    assert [(item.value, item.meta) for item in suggestions] == [
+        ("ginutech.com", "domain · addon"),
+        ("app.ginutech.com", "hosted · ginutech.com"),
+    ]
