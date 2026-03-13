@@ -2,6 +2,8 @@
 
 CLI interactif pour gerer domaines, sous-domaines cPanel et enregistrements DNS sur un hebergement o2switch/cPanel.
 
+Version actuelle: `0.1.0`
+
 ## Installation
 
 ```bash
@@ -34,6 +36,7 @@ Reusing an existing local install:
 The installer also publishes launchers into `~/.local/bin` by default:
 
 ```bash
+o2switch-cli --version
 o2switch-cli --help
 o2switch_cli --help
 ```
@@ -97,6 +100,7 @@ Setup non interactive:
 ## Usage
 
 ```bash
+.venv/bin/o2switch-cli --version
 .venv/bin/o2switch-cli --help
 .venv/bin/o2switch-cli completion show
 .venv/bin/o2switch-cli completion install
@@ -115,6 +119,31 @@ Sans sous-commande, le binaire ouvre le mode interactif si le terminal est TTY.
 Le mode interactif inclut maintenant des spinners de chargement, une recherche temps reel avec suggestions pendant la frappe, et une navigation paginee pour les grands jeux de resultats.
 En mode commande, les sous-commandes, options, et valeurs principales (`--root`, `--host`, `--fqdn`, termes de recherche) sont autocompletables en bash.
 Les commandes DNS acceptent `--zone` pour forcer explicitement la zone DNS cible. Quand `--zone` est fournie, `--host` peut etre un label simple (`odoo-staging`) ou un FQDN deja inclus dans cette zone.
+
+## Versioning
+
+`o2switch-cli` suit **Semantic Versioning**.
+
+- format: `MAJOR.MINOR.PATCH`
+- version actuelle: `0.1.0`
+- tags de release: `vMAJOR.MINOR.PATCH`
+- changelog: [`CHANGELOG.md`](CHANGELOG.md)
+- politique detaillee: [`VERSIONING.md`](VERSIONING.md)
+
+Regles de bump:
+
+- `MAJOR`: rupture de compatibilite sur la CLI, la sortie JSON stable, les comportements de mutation, ou les variables/configs publiques
+- `MINOR`: nouvelles commandes, nouvelles options retro-compatibles, nouveaux workflows ou nouveaux champs JSON optionnels
+- `PATCH`: corrections retro-compatibles, docs, tests, durcissement interne sans rupture contractuelle
+
+Tant que le projet reste en `0.x`, un bump `MINOR` peut encore embarquer des changements cassants. Les correctifs `PATCH` doivent rester retro-compatibles.
+
+Source de verite:
+
+- version package: [`o2switch_cli/__init__.py`](o2switch_cli/__init__.py)
+- metadata build: [`pyproject.toml`](pyproject.toml) lit cette version dynamiquement
+
+Avant une release, mettre a jour le changelog, verifier `o2switch-cli --version`, puis tagger le commit avec `vX.Y.Z`.
 
 ## Development
 

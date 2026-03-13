@@ -28,6 +28,12 @@ def test_root_without_command_shows_help() -> None:
     assert "Interactive cPanel DNS and hosted subdomain operator." in result.output
 
 
+def test_version_option_prints_installed_version() -> None:
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "o2switch-cli 0.1.0"
+
+
 def test_config_show_json_redacts_token() -> None:
     result = runner.invoke(
         app,

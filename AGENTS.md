@@ -61,6 +61,8 @@ Use a trunk-based workflow. Create branches from `main` with one of these patter
 
 Use Conventional Commits, for example `docs: add contributor rules` or `feat: scaffold dns service`.
 
+Versioning is SemVer. The current package version source of truth is `o2switch_cli/__init__.py`, build metadata reads it from `pyproject.toml`, release notes live in `CHANGELOG.md`, and release tags must use `vMAJOR.MINOR.PATCH`.
+
 After every update batch, create a commit before handing work off. Do not leave intended repository changes uncommitted.
 
 PRs should include:

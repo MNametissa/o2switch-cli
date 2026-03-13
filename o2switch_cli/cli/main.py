@@ -5,6 +5,7 @@ from pathlib import Path
 
 import typer
 
+from o2switch_cli import __version__
 from o2switch_cli.cli.completion_cmd import app as completion_app
 from o2switch_cli.cli.config_cmd import app as config_app
 from o2switch_cli.cli.context import build_context
@@ -29,6 +30,12 @@ app.add_typer(config_app, name="config", help="Inspect configuration and API acc
 app.add_typer(completion_app, name="completion", help="Manage shell autocomplete support.")
 
 
+def version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"o2switch-cli {__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -39,6 +46,14 @@ def main(
     yes: bool = typer.Option(False, "--yes"),
     verbose: bool = typer.Option(False, "--verbose"),
     no_verify: bool = typer.Option(False, "--no-verify"),
+    version: bool | None = typer.Option(
+        None,
+        "--version",
+        callback=version_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show the installed o2switch-cli version and exit.",
+    ),
 ) -> None:
     settings = load_settings(config)
     app_context = build_context(
