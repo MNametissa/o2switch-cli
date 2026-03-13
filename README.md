@@ -91,8 +91,9 @@ Setup non interactive:
 .venv/bin/o2switch-cli domains list
 .venv/bin/o2switch-cli domains list --page 2 --page-size 10
 .venv/bin/o2switch-cli dns upsert --host odoo-staging.ginutech.com --ip 203.0.113.25
+.venv/bin/o2switch-cli dns upsert --zone ginutech.com --host odoo-staging --ip 203.0.113.25
 .venv/bin/o2switch-cli dns search ginutech --page-size 15
-.venv/bin/o2switch-cli dns delete --host odoo-staging.ginutech.com --dry-run
+.venv/bin/o2switch-cli dns delete --zone ginutech.com --host odoo-staging --dry-run
 .venv/bin/o2switch-cli subdomains create --root ginutech.com --label odoo-staging --ip 203.0.113.25
 .venv/bin/o2switch-cli config show --json
 ```
@@ -100,6 +101,7 @@ Setup non interactive:
 Sans sous-commande, le binaire ouvre le mode interactif si le terminal est TTY.
 Le mode interactif inclut maintenant des spinners de chargement, une recherche temps reel avec suggestions pendant la frappe, et une navigation paginee pour les grands jeux de resultats.
 En mode commande, les sous-commandes, options, et valeurs principales (`--root`, `--host`, `--fqdn`, termes de recherche) sont autocompletables en bash.
+Les commandes DNS acceptent `--zone` pour forcer explicitement la zone DNS cible. Quand `--zone` est fournie, `--host` peut etre un label simple (`odoo-staging`) ou un FQDN deja inclus dans cette zone.
 
 ## Development
 

@@ -45,9 +45,21 @@ class DomainService:
     def root_domains(self) -> list[str]:
         return [item.domain for item in self.list_domains() if item.type is not DomainType.SUBDOMAIN]
 
+    def dns_zones(self) -> list[str]:
+        return [item.domain for item in self.list_domains() if item.has_dns_zone]
+
     def search(self, term: str) -> list[DomainDescriptor]:
         needle = term.strip().lower()
         return [item for item in self.list_domains() if needle in item.domain]
+
+    def matching_dns_zones(self, hostname: str) -> list[str]:
+        normalised = normalize_hostname(hostname)
+        matches = [
+            zone
+            for zone in self.dns_zones()
+            if normalised == zone or normalised.endswith(f".{zone}")
+        ]
+        return sorted(matches, key=len, reverse=True)
 
     def get_domain_descriptor(self, domain: str, operation: str) -> DomainDescriptor:
         target = normalize_hostname(domain)
@@ -58,3 +70,6 @@ class DomainService:
 
     def resolve_root_domain(self, hostname: str, operation: str) -> str:
         return select_root_domain(hostname, self.root_domains(), operation)
+
+    def resolve_dns_zone(self, hostname: str, operation: str) -> str:
+        return select_root_domain(hostname, self.dns_zones(), operation)

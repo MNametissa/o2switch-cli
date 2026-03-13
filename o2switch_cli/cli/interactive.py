@@ -130,14 +130,24 @@ def run_interactive_menu(app_context: AppContext) -> None:
                     render_page=lambda page_items, window: ui.print_hostname_search_results(page_items, window),
                 )
             elif selected_choice == "DNS: upsert A record":
-                host = questionary.text("Hostname").ask() or ""
+                host = questionary.text("Hostname or label").ask() or ""
+                zone_default = ""
+                if "." in host:
+                    zone_candidates = active_context.runtime().domains.matching_dns_zones(host)
+                    if zone_candidates:
+                        zone_default = zone_candidates[0]
+                dns_zone = questionary.text("DNS zone", default=zone_default).ask() or None
                 ip = questionary.text("IPv4 target").ask() or ""
                 ttl_text = questionary.text("TTL", default=str(active_context.settings.default_ttl)).ask() or str(
                     active_context.settings.default_ttl
                 )
                 with ui.status("Inspecting DNS state", spinner="dots12"):
                     zone, _, _, plan = active_context.runtime().dns.plan_upsert_a_record(
-                        host, ip, int(ttl_text), force=active_context.force
+                        host,
+                        ip,
+                        int(ttl_text),
+                        force=active_context.force,
+                        zone=dns_zone,
                     )
                 ui.print_plan(plan, zone=zone)
                 if active_context.yes or ui.confirm("Apply this change?"):
@@ -149,14 +159,23 @@ def run_interactive_menu(app_context: AppContext) -> None:
                             dry_run=active_context.dry_run,
                             force=active_context.force,
                             verify=active_context.verify_after_mutation,
+                            zone=dns_zone,
                         )
                     ui.print_result(result)
                     cache.invalidate(dns=True)
             elif selected_choice == "DNS: delete A record":
-                host = questionary.text("Hostname").ask() or ""
+                host = questionary.text("Hostname or label").ask() or ""
+                zone_default = ""
+                if "." in host:
+                    zone_candidates = active_context.runtime().domains.matching_dns_zones(host)
+                    if zone_candidates:
+                        zone_default = zone_candidates[0]
+                dns_zone = questionary.text("DNS zone", default=zone_default).ask() or None
                 with ui.status("Inspecting DNS state", spinner="dots12"):
                     zone, _, _, plan = active_context.runtime().dns.plan_delete_a_record(
-                        host, force=active_context.force
+                        host,
+                        force=active_context.force,
+                        zone=dns_zone,
                     )
                 ui.print_plan(plan, zone=zone)
                 if active_context.yes or ui.confirm("Delete this record?"):
@@ -166,13 +185,20 @@ def run_interactive_menu(app_context: AppContext) -> None:
                             dry_run=active_context.dry_run,
                             force=active_context.force,
                             verify=active_context.verify_after_mutation,
+                            zone=dns_zone,
                         )
                     ui.print_result(result)
                     cache.invalidate(dns=True)
             elif selected_choice == "DNS: verify":
-                host = questionary.text("Hostname").ask() or ""
+                host = questionary.text("Hostname or label").ask() or ""
+                zone_default = ""
+                if "." in host:
+                    zone_candidates = active_context.runtime().domains.matching_dns_zones(host)
+                    if zone_candidates:
+                        zone_default = zone_candidates[0]
+                dns_zone = questionary.text("DNS zone", default=zone_default).ask() or None
                 with ui.status("Resolving DNS", spinner="dots12"):
-                    result = active_context.runtime().dns.verify_record(host)
+                    result = active_context.runtime().dns.verify_record(host, zone=dns_zone)
                 ui.print_result(result)
             elif selected_choice == "Subdomains: search":
                 subdomains = cache.get_subdomains(active_context, ui)

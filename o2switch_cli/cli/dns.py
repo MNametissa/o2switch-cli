@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from o2switch_cli.cli.autocomplete import complete_hostname_terms
+from o2switch_cli.cli.autocomplete import complete_hostname_terms, complete_zone_domains
 from o2switch_cli.cli.helpers import confirm_plan, exit_for_result_warning, run_guarded
 from o2switch_cli.cli.interactive_support import paginate_items
 from o2switch_cli.cli.ui import TerminalUI
@@ -33,13 +33,19 @@ def upsert_dns(
     host: str = typer.Option(..., "--host", autocompletion=complete_hostname_terms),
     ip: str = typer.Option(..., "--ip"),
     ttl: int | None = typer.Option(None, "--ttl"),
+    dns_zone: str | None = typer.Option(
+        None,
+        "--zone",
+        autocompletion=complete_zone_domains,
+        help="Explicit DNS zone. Defaults to the longest matching account zone.",
+    ),
 ) -> None:
     def action(app_context):
         ui = TerminalUI(app_context.console, app_context.output_format)
         effective_ttl = ttl or app_context.settings.default_ttl
         with ui.status("Inspecting DNS state", spinner="dots12"):
             zone, _, _, plan = app_context.runtime().dns.plan_upsert_a_record(
-                host, ip, effective_ttl, force=app_context.force
+                host, ip, effective_ttl, force=app_context.force, zone=dns_zone
             )
         if not confirm_plan(app_context, ui, plan, zone=zone):
             ui.print_info("Mutation cancelled.")
@@ -52,6 +58,7 @@ def upsert_dns(
                 dry_run=app_context.dry_run,
                 force=app_context.force,
                 verify=app_context.verify_after_mutation,
+                zone=dns_zone,
             )
         ui.print_result(result)
         exit_for_result_warning(result)
@@ -63,11 +70,21 @@ def upsert_dns(
 def delete_dns(
     ctx: typer.Context,
     host: str = typer.Option(..., "--host", autocompletion=complete_hostname_terms),
+    dns_zone: str | None = typer.Option(
+        None,
+        "--zone",
+        autocompletion=complete_zone_domains,
+        help="Explicit DNS zone. Defaults to the longest matching account zone.",
+    ),
 ) -> None:
     def action(app_context):
         ui = TerminalUI(app_context.console, app_context.output_format)
         with ui.status("Inspecting DNS state", spinner="dots12"):
-            zone, _, _, plan = app_context.runtime().dns.plan_delete_a_record(host, force=app_context.force)
+            zone, _, _, plan = app_context.runtime().dns.plan_delete_a_record(
+                host,
+                force=app_context.force,
+                zone=dns_zone,
+            )
         if not confirm_plan(app_context, ui, plan, zone=zone):
             ui.print_info("Mutation cancelled.")
             return
@@ -77,6 +94,7 @@ def delete_dns(
                 dry_run=app_context.dry_run,
                 force=app_context.force,
                 verify=app_context.verify_after_mutation,
+                zone=dns_zone,
             )
         ui.print_result(result)
         exit_for_result_warning(result)
@@ -89,11 +107,17 @@ def verify_dns(
     ctx: typer.Context,
     host: str = typer.Option(..., "--host", autocompletion=complete_hostname_terms),
     ip: str | None = typer.Option(None, "--ip"),
+    dns_zone: str | None = typer.Option(
+        None,
+        "--zone",
+        autocompletion=complete_zone_domains,
+        help="Explicit DNS zone. Defaults to the longest matching account zone.",
+    ),
 ) -> None:
     def action(app_context):
         ui = TerminalUI(app_context.console, app_context.output_format)
         with ui.status("Resolving DNS", spinner="dots12"):
-            result = app_context.runtime().dns.verify_record(host, ip)
+            result = app_context.runtime().dns.verify_record(host, ip, zone=dns_zone)
         ui.print_result(result)
         exit_for_result_warning(result)
 

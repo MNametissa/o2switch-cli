@@ -74,6 +74,12 @@ def test_complete_root_domains_filters_and_formats(monkeypatch: pytest.MonkeyPat
     assert items == [("ginutech.com", "addon domain")]
 
 
+def test_complete_zone_domains_include_dns_zones(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(autocomplete, "completion_runtime", fake_completion_runtime)
+    items = autocomplete.complete_zone_domains(None, [], "staging")
+    assert items == [("staging.ginutech.com", "subdomain domain")]
+
+
 def test_complete_hostname_terms_include_dns_and_hosted_matches(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(autocomplete, "completion_runtime", fake_completion_runtime)
     items = autocomplete.complete_hostname_terms(None, [], "_d")

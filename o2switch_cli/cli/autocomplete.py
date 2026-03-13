@@ -142,6 +142,15 @@ def complete_root_domains(ctx: typer.Context, args: list[str], incomplete: str) 
         return _match_candidates(_domain_items(roots), incomplete)
 
 
+def complete_zone_domains(ctx: typer.Context, args: list[str], incomplete: str) -> list[CompletionItem]:
+    del args
+    with completion_runtime(ctx) as runtime:
+        if runtime is None:
+            return []
+        zones = [item for item in runtime.domains.list_domains() if item.has_dns_zone]
+        return _match_candidates(_domain_items(zones), incomplete)
+
+
 def complete_subdomain_terms(ctx: typer.Context, args: list[str], incomplete: str) -> list[CompletionItem]:
     del args
     with completion_runtime(ctx) as runtime:

@@ -6,7 +6,7 @@ import binascii
 from o2switch_cli.core.audit import AuditService
 from o2switch_cli.core.cpanel_client import CpanelClient
 from o2switch_cli.core.domain_service import DomainService
-from o2switch_cli.core.errors import ConflictAppError, NotFoundAppError, TransportAppError
+from o2switch_cli.core.errors import ConflictAppError, NotFoundAppError, TransportAppError, ValidationAppError
 from o2switch_cli.core.models import (
     DNSRecord,
     HostnameSearchResult,
@@ -20,7 +20,9 @@ from o2switch_cli.core.models import (
 )
 from o2switch_cli.core.validators import (
     canonical_record_name,
+    fqdn_for_label,
     normalize_hostname,
+    relative_name,
     validate_ipv4,
     validate_reserved_hostname,
     validate_ttl,
@@ -154,9 +156,49 @@ class DNSService:
         records, _ = self._zone_state(root_domain)
         return records
 
+    def _resolve_hostname_for_zone(self, hostname_or_label: str, operation: str, zone: str | None = None) -> str:
+        candidate = hostname_or_label.strip().lower().rstrip(".")
+        if zone is None:
+            return normalize_hostname(candidate)
+
+        selected_zone = normalize_hostname(zone)
+        if not candidate or candidate == "@":
+            return selected_zone
+
+        normalized_candidate = normalize_hostname(candidate)
+        if "." in normalized_candidate:
+            if normalized_candidate == selected_zone or normalized_candidate.endswith(f".{selected_zone}"):
+                return normalized_candidate
+            raise ValidationAppError(
+                operation,
+                "Hostname does not belong to the selected DNS zone.",
+                normalized_candidate,
+            )
+        return fqdn_for_label(normalized_candidate, selected_zone)
+
+    def _resolve_dns_zone(self, hostname: str, operation: str, zone: str | None = None) -> str:
+        if zone is None:
+            return self._domains.resolve_dns_zone(hostname, operation)
+
+        selected_zone = normalize_hostname(zone)
+        descriptor = self._domains.get_domain_descriptor(selected_zone, operation)
+        if not descriptor.has_dns_zone:
+            raise NotFoundAppError(operation, "The selected domain does not expose a DNS zone.", selected_zone)
+        if hostname != selected_zone and not hostname.endswith(f".{selected_zone}"):
+            raise ValidationAppError(
+                operation,
+                "Hostname does not belong to the selected DNS zone.",
+                hostname,
+            )
+        return selected_zone
+
+    @staticmethod
+    def _mutation_dname(hostname: str, zone: str) -> str:
+        return relative_name(hostname, zone) or "@"
+
     def find_records(self, fqdn: str, record_type: str = "A") -> list[DNSRecord]:
         hostname = normalize_hostname(fqdn)
-        root_domain = self._domains.resolve_root_domain(hostname, "dns_find")
+        root_domain = self._domains.resolve_dns_zone(hostname, "dns_find")
         records, _ = self._zone_state(root_domain)
         return [item for item in records if item.name == hostname and item.type == record_type.upper()]
 
@@ -247,7 +289,7 @@ class DNSService:
         if "." not in hostname:
             return []
         try:
-            root_domain = self._domains.resolve_root_domain(hostname, "dns_search")
+            root_domain = self._domains.resolve_dns_zone(hostname, "dns_search")
         except NotFoundAppError:
             return []
         return [
@@ -260,12 +302,12 @@ class DNSService:
         ]
 
     def plan_upsert_a_record(
-        self, fqdn: str, ip: str, ttl: int, *, force: bool
+        self, fqdn: str, ip: str, ttl: int, *, force: bool, zone: str | None = None
     ) -> tuple[str, int | None, list[DNSRecord], MutationPlan]:
-        hostname = normalize_hostname(fqdn)
+        hostname = self._resolve_hostname_for_zone(fqdn, "dns_upsert", zone=zone)
         ipv4 = validate_ipv4(ip)
         resolved_ttl = validate_ttl(ttl, ttl)
-        root_domain = self._domains.resolve_root_domain(hostname, "dns_upsert")
+        root_domain = self._resolve_dns_zone(hostname, "dns_upsert", zone=zone)
         validate_reserved_hostname(hostname, root_domain, self._reserved_labels)
         records, serial = self._zone_state(root_domain)
         matches = [item for item in records if item.name == hostname and item.type == "A"]
@@ -321,12 +363,19 @@ class DNSService:
         dry_run: bool,
         force: bool,
         verify: bool,
+        zone: str | None = None,
         mode: OperationMode = OperationMode.DNS_ONLY,
     ) -> tuple[MutationPlan, OperationResult]:
-        hostname = normalize_hostname(fqdn)
+        hostname = self._resolve_hostname_for_zone(fqdn, "dns_upsert", zone=zone)
         ipv4 = validate_ipv4(ip)
         resolved_ttl = validate_ttl(ttl, ttl)
-        root_domain, serial, matches, plan = self.plan_upsert_a_record(hostname, ipv4, resolved_ttl, force=force)
+        root_domain, serial, matches, plan = self.plan_upsert_a_record(
+            hostname,
+            ipv4,
+            resolved_ttl,
+            force=force,
+            zone=zone,
+        )
 
         if plan.planned_action is PlannedAction.NOOP:
             result = OperationResult(
@@ -352,27 +401,28 @@ class DNSService:
         action = "dry-run" if dry_run else "created"
         if not dry_run:
             serial = self._require_serial("dns_upsert", root_domain, serial)
+            mutation_name = self._mutation_dname(hostname, root_domain)
             add = None
             edit = None
             remove = None
             if len(matches) > 1:
                 action = "updated"
                 remove = [self._line_index(record) for record in matches]
-                add = [{"record_type": "A", "dname": hostname, "ttl": resolved_ttl, "data": [ipv4]}]
+                add = [{"record_type": "A", "dname": mutation_name, "ttl": resolved_ttl, "data": [ipv4]}]
             elif matches:
                 action = "updated"
                 edit = [
                     {
                         "line_index": self._line_index(record),
                         "record_type": "A",
-                        "dname": hostname,
+                        "dname": mutation_name,
                         "ttl": resolved_ttl,
                         "data": [ipv4],
                     }
                     for record in matches
                 ]
             else:
-                add = [{"record_type": "A", "dname": hostname, "ttl": resolved_ttl, "data": [ipv4]}]
+                add = [{"record_type": "A", "dname": mutation_name, "ttl": resolved_ttl, "data": [ipv4]}]
             self._client.mass_edit_zone(zone=root_domain, serial=serial, add=add, edit=edit, remove=remove)
             applied = True
             if verify:
@@ -411,9 +461,11 @@ class DNSService:
             result.verification = VerificationStatus.ACCEPTED_PENDING_VISIBILITY
         return plan, result
 
-    def plan_delete_a_record(self, fqdn: str, *, force: bool) -> tuple[str, int | None, list[DNSRecord], MutationPlan]:
-        hostname = normalize_hostname(fqdn)
-        root_domain = self._domains.resolve_root_domain(hostname, "dns_delete")
+    def plan_delete_a_record(
+        self, fqdn: str, *, force: bool, zone: str | None = None
+    ) -> tuple[str, int | None, list[DNSRecord], MutationPlan]:
+        hostname = self._resolve_hostname_for_zone(fqdn, "dns_delete", zone=zone)
+        root_domain = self._resolve_dns_zone(hostname, "dns_delete", zone=zone)
         records, serial = self._zone_state(root_domain)
         matches = [item for item in records if item.name == hostname and item.type == "A"]
         if not matches:
@@ -437,9 +489,10 @@ class DNSService:
         dry_run: bool,
         force: bool,
         verify: bool,
+        zone: str | None = None,
     ) -> tuple[MutationPlan, OperationResult]:
-        hostname = normalize_hostname(fqdn)
-        root_domain, serial, matches, plan = self.plan_delete_a_record(hostname, force=force)
+        hostname = self._resolve_hostname_for_zone(fqdn, "dns_delete", zone=zone)
+        root_domain, serial, matches, plan = self.plan_delete_a_record(hostname, force=force, zone=zone)
         if not dry_run:
             serial = self._require_serial("dns_delete", root_domain, serial)
             remove = [self._line_index(record) for record in matches]
@@ -477,9 +530,9 @@ class DNSService:
         )
         return plan, result
 
-    def verify_record(self, fqdn: str, expected_ip: str | None = None) -> OperationResult:
-        hostname = normalize_hostname(fqdn)
-        root_domain = self._domains.resolve_root_domain(hostname, "dns_verify")
+    def verify_record(self, fqdn: str, expected_ip: str | None = None, zone: str | None = None) -> OperationResult:
+        hostname = self._resolve_hostname_for_zone(fqdn, "dns_verify", zone=zone)
+        root_domain = self._resolve_dns_zone(hostname, "dns_verify", zone=zone)
         verification, addresses = self._resolver.verify_a(hostname, expected_ip)
         return OperationResult(
             operation="dns_verify",

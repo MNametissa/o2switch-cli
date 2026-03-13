@@ -170,6 +170,7 @@ class SubdomainService:
                 dry_run=dry_run,
                 force=force,
                 verify=verify,
+                zone=parent,
                 mode=OperationMode.HOSTED_DNS,
             )
             result.after = {

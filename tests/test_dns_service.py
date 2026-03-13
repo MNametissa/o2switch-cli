@@ -18,19 +18,27 @@ class FakeClient:
         hosted: list[dict] | None = None,
         *,
         serial: int | None = 2026031201,
+        domains_payload: dict | None = None,
+        zone_entries: dict[str, list[dict]] | None = None,
     ) -> None:
         self.entries = entries
         self.hosted = hosted or []
         self.serial = serial
+        self.domains_payload = domains_payload or {
+            "main_domain": "ginutech.com",
+            "addon_domains": [],
+            "parked_domains": [],
+        }
+        self.zone_entries = zone_entries or {"ginutech.com": entries}
         self.mass_edit_calls: list[dict] = []
 
     def list_domains(self) -> ApiResult:
-        return ApiResult(data={"main_domain": "ginutech.com", "addon_domains": [], "parked_domains": []})
+        return ApiResult(data=self.domains_payload)
 
     def parse_zone(self, zone: str) -> ApiResult:
-        assert zone == "ginutech.com"
+        assert zone in self.zone_entries
         metadata = {"serial": self.serial} if self.serial is not None else {}
-        return ApiResult(data={"entries": self.entries}, metadata=metadata)
+        return ApiResult(data={"entries": self.zone_entries[zone]}, metadata=metadata)
 
     def mass_edit_zone(self, **kwargs) -> ApiResult:
         self.mass_edit_calls.append(kwargs)
@@ -50,8 +58,16 @@ def build_service(
     hosted: list[dict] | None = None,
     *,
     serial: int | None = 2026031201,
+    domains_payload: dict | None = None,
+    zone_entries: dict[str, list[dict]] | None = None,
 ) -> tuple[FakeClient, DNSService]:
-    client = FakeClient(entries, hosted=hosted, serial=serial)
+    client = FakeClient(
+        entries,
+        hosted=hosted,
+        serial=serial,
+        domains_payload=domains_payload,
+        zone_entries=zone_entries,
+    )
     domains = DomainService(client)  # type: ignore[arg-type]
     service = DNSService(client, domains, FakeResolver(), AuditService(), ["www", "mail"])  # type: ignore[arg-type]
     return client, service
@@ -98,7 +114,65 @@ def test_upsert_creates_record_when_missing() -> None:
     )
     assert result.action == "created"
     assert client.mass_edit_calls[0]["zone"] == "ginutech.com"
+    assert client.mass_edit_calls[0]["add"][0]["dname"] == "odoo"
     assert client.mass_edit_calls[0]["add"][0]["data"] == ["203.0.113.25"]
+
+
+def test_upsert_allows_label_input_when_zone_is_selected() -> None:
+    client, service = build_service([])
+    _, result = service.upsert_a_record(
+        "odoo",
+        "203.0.113.25",
+        300,
+        dry_run=False,
+        force=False,
+        verify=False,
+        zone="ginutech.com",
+    )
+    assert result.target == "odoo.ginutech.com"
+    assert client.mass_edit_calls[0]["zone"] == "ginutech.com"
+    assert client.mass_edit_calls[0]["add"][0]["dname"] == "odoo"
+
+
+def test_upsert_auto_selects_longest_matching_dns_zone() -> None:
+    client, service = build_service(
+        [],
+        domains_payload={
+            "main_domain": "ginutech.com",
+            "addon_domains": [],
+            "parked_domains": [],
+            "sub_domains": ["event-planner.ginutech.com"],
+        },
+        zone_entries={
+            "ginutech.com": [],
+            "event-planner.ginutech.com": [],
+        },
+    )
+    _, result = service.upsert_a_record(
+        "api.event-planner.ginutech.com",
+        "203.0.113.25",
+        300,
+        dry_run=False,
+        force=False,
+        verify=False,
+    )
+    assert result.zone == "event-planner.ginutech.com"
+    assert client.mass_edit_calls[0]["zone"] == "event-planner.ginutech.com"
+    assert client.mass_edit_calls[0]["add"][0]["dname"] == "api"
+
+
+def test_upsert_rejects_hostnames_outside_selected_zone() -> None:
+    _, service = build_service([])
+    with pytest.raises(ValidationAppError):
+        service.upsert_a_record(
+            "odoo.example.com",
+            "203.0.113.25",
+            300,
+            dry_run=False,
+            force=False,
+            verify=False,
+            zone="ginutech.com",
+        )
 
 
 def test_upsert_rejects_reserved_direct_hostname() -> None:

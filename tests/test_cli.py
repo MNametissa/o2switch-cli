@@ -45,7 +45,8 @@ def test_config_show_json_redacts_token() -> None:
 
 def test_dns_upsert_uses_runtime_and_returns_json(monkeypatch) -> None:
     class FakeDNS:
-        def plan_upsert_a_record(self, host: str, ip: str, ttl: int, *, force: bool):
+        def plan_upsert_a_record(self, host: str, ip: str, ttl: int, *, force: bool, zone: str | None = None):
+            assert zone == "ginutech.com"
             return (
                 "ginutech.com",
                 None,
@@ -58,7 +59,8 @@ def test_dns_upsert_uses_runtime_and_returns_json(monkeypatch) -> None:
                 ),
             )
 
-        def upsert_a_record(self, host: str, ip: str, ttl: int, **_: object):
+        def upsert_a_record(self, host: str, ip: str, ttl: int, **kwargs: object):
+            assert kwargs["zone"] == "ginutech.com"
             result = OperationResult(
                 operation="dns_upsert",
                 mode=OperationMode.DNS_ONLY,
@@ -72,7 +74,7 @@ def test_dns_upsert_uses_runtime_and_returns_json(monkeypatch) -> None:
                 new_value=ip,
                 ttl=ttl,
             )
-            return self.plan_upsert_a_record(host, ip, ttl, force=False)[3], result
+            return self.plan_upsert_a_record(host, ip, ttl, force=False, zone="ginutech.com")[3], result
 
     class FakeRuntime:
         dns = FakeDNS()
@@ -80,7 +82,19 @@ def test_dns_upsert_uses_runtime_and_returns_json(monkeypatch) -> None:
     monkeypatch.setattr("o2switch_cli.cli.context.AppContext.runtime", lambda self: FakeRuntime())
     result = runner.invoke(
         app,
-        ["--json", "--dry-run", "--yes", "dns", "upsert", "--host", "odoo.ginutech.com", "--ip", "203.0.113.25"],
+        [
+            "--json",
+            "--dry-run",
+            "--yes",
+            "dns",
+            "upsert",
+            "--host",
+            "odoo",
+            "--ip",
+            "203.0.113.25",
+            "--zone",
+            "ginutech.com",
+        ],
     )
     payload = json.loads(result.output)
     assert result.exit_code == 0
@@ -90,7 +104,8 @@ def test_dns_upsert_uses_runtime_and_returns_json(monkeypatch) -> None:
 
 def test_dns_verify_lookup_failure_returns_warning_exit_code(monkeypatch) -> None:
     class FakeDNS:
-        def verify_record(self, host: str, ip: str | None = None) -> OperationResult:
+        def verify_record(self, host: str, ip: str | None = None, zone: str | None = None) -> OperationResult:
+            assert zone == "ginutech.com"
             return OperationResult(
                 operation="dns_verify",
                 mode=OperationMode.DNS_ONLY,
@@ -106,7 +121,7 @@ def test_dns_verify_lookup_failure_returns_warning_exit_code(monkeypatch) -> Non
         dns = FakeDNS()
 
     monkeypatch.setattr("o2switch_cli.cli.context.AppContext.runtime", lambda self: FakeRuntime())
-    result = runner.invoke(app, ["--json", "dns", "verify", "--host", "odoo.ginutech.com"])
+    result = runner.invoke(app, ["--json", "dns", "verify", "--host", "odoo", "--zone", "ginutech.com"])
     payload = json.loads(result.output)
     assert result.exit_code == 7
     assert payload["verification"] == "lookup_failed"
@@ -204,7 +219,8 @@ def test_subdomains_search_json_supports_pagination(monkeypatch) -> None:
 
 def test_dns_verify_mismatch_returns_warning_exit_code(monkeypatch) -> None:
     class FakeDNS:
-        def verify_record(self, host: str, ip: str | None = None):
+        def verify_record(self, host: str, ip: str | None = None, zone: str | None = None):
+            assert zone is None
             return OperationResult(
                 operation="dns_verify",
                 mode=OperationMode.DNS_ONLY,
