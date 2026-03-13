@@ -43,10 +43,11 @@ def managed_bashrc_block(
     for command_name in command_names:
         command_path = (resolved_completion_dir / command_name).expanduser()
         source_lines.append(f'    [[ -r "{command_path}" ]] && source "{command_path}"')
+    rendered_lines = "\n".join(source_lines)
     return (
         f"{BASHRC_MARKER_START}\n"
         'if [[ -n "${BASH_VERSION:-}" ]]; then\n'
-        f"{source_lines}\n"
+        f"{rendered_lines}\n"
         "fi\n"
         f"{BASHRC_MARKER_END}\n"
     )
