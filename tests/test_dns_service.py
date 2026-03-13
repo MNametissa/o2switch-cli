@@ -311,6 +311,21 @@ def test_search_combines_hosted_dns_and_available_states() -> None:
     assert available[0].category is SearchCategory.AVAILABLE
 
 
+def test_search_prioritizes_hosted_and_app_records_over_service_noise() -> None:
+    _, service = build_service(
+        [
+            {"dname": "_autodiscover._tcp.app", "record_type": "SRV", "data": ["0"], "ttl": 300, "line_index": 1},
+            {"dname": "app", "record_type": "A", "address": "203.0.113.25", "ttl": 300, "line_index": 2},
+        ],
+        hosted=[{"domain": "app.ginutech.com", "rootdomain": "ginutech.com", "dir": "/public_html/app"}],
+    )
+
+    results = service.search("ginutech.com")
+    hostnames = [item.hostname for item in results]
+
+    assert hostnames.index("app.ginutech.com") < hostnames.index("_autodiscover._tcp.app.ginutech.com")
+
+
 def test_search_returns_available_when_hostname_is_free() -> None:
     _, service = build_service([])
     results = service.search("free.ginutech.com")

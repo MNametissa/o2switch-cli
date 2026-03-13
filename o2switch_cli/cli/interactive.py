@@ -9,12 +9,15 @@ from o2switch_cli.cli.helpers import run_guarded_interactive
 from o2switch_cli.cli.interactive_support import (
     build_dns_search_suggestions,
     build_domain_suggestions,
+    build_hostname_suggestions,
     build_subdomain_suggestions,
     filter_domains,
+    filter_hostname_results,
     filter_subdomains,
+    paginate_items,
 )
 from o2switch_cli.cli.ui import TerminalUI
-from o2switch_cli.core.models import DomainDescriptor, SubdomainDescriptor
+from o2switch_cli.core.models import DomainDescriptor, HostnameSearchResult, SubdomainDescriptor
 
 MIN_PAGE_SIZE = 6
 MAX_PAGE_SIZE = 12
@@ -52,6 +55,77 @@ class InteractiveDataCache:
 
 def _page_size(ui: TerminalUI) -> int:
     return max(MIN_PAGE_SIZE, min(MAX_PAGE_SIZE, ui.console.size.height - 15))
+
+
+def _browse_hostname_results(
+    ui: TerminalUI,
+    results: list[HostnameSearchResult],
+    *,
+    page_size: int,
+    empty_message: str,
+) -> None:
+    if not results:
+        ui.print_info(empty_message)
+        return
+
+    all_results = list(results)
+    visible_results = list(results)
+    filter_term = ""
+    page = 1
+
+    while True:
+        if not visible_results:
+            ui.console.clear()
+            ui.print_banner()
+            ui.print_info(f'No results matched the filter "{filter_term}".')
+        else:
+            window = paginate_items(visible_results, page=page, page_size=page_size)
+            ui.console.clear()
+            ui.print_banner()
+            if filter_term:
+                ui.print_info(f'Filtered view: "{filter_term}"')
+            ui.print_hostname_search_results(window.items, window)
+            page = window.page
+
+        choices: list[str] = []
+        total_pages = max(1, (len(visible_results) + page_size - 1) // page_size)
+        if page > 1:
+            choices.append("Previous page")
+        if page < total_pages and visible_results:
+            choices.append("Next page")
+        choices.extend(["First page", "Last page", "Filter results"])
+        if filter_term:
+            choices.append("Reset filters")
+        choices.append("Close results")
+
+        action = questionary.select(
+            f"Browse results ({page}/{total_pages})",
+            choices=choices,
+        ).ask()
+        if action == "Previous page":
+            page -= 1
+        elif action == "Next page":
+            page += 1
+        elif action == "First page":
+            page = 1
+        elif action == "Last page":
+            page = total_pages
+        elif action == "Filter results":
+            next_filter = ui.prompt_realtime_search(
+                "Filter current results",
+                suggestions=build_hostname_suggestions(all_results),
+                help_text="Type hosted, dns, hostname, record type, IP, zone, or docroot to narrow the result set",
+            )
+            if next_filter.strip():
+                filter_term = next_filter.strip()
+                visible_results = filter_hostname_results(all_results, filter_term)
+                page = 1
+        elif action == "Reset filters":
+            filter_term = ""
+            visible_results = list(all_results)
+            page = 1
+        else:
+            return
 
 
 def run_interactive_menu(app_context: AppContext) -> None:
@@ -115,11 +189,11 @@ def run_interactive_menu(app_context: AppContext) -> None:
                     return
                 with ui.status("Searching hosted subdomains and DNS zones", spinner="dots12"):
                     matches = active_context.runtime().dns.search(term)
-                ui.browse_pages(
+                _browse_hostname_results(
+                    ui,
                     matches,
                     page_size=_page_size(ui),
                     empty_message="No DNS or hosted results matched the search term.",
-                    render_page=lambda page_items, window: ui.print_hostname_search_results(page_items, window),
                 )
             elif selected_choice == "DNS: upsert A record":
                 host = questionary.text("Hostname or label").ask() or ""

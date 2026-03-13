@@ -110,8 +110,8 @@ def test_interactive_dns_search_queries_submitted_term_only(monkeypatch) -> None
         subdomains = FakeSubdomains()
         dns = FakeDNS()
 
-    answers = iter(["DNS: search", "Exit"])
-    browsed: list[list[HostnameSearchResult]] = []
+    answers = iter(["DNS: search", "Close results", "Exit"])
+    rendered: list[list[str]] = []
 
     class FakeSelect:
         def ask(self):
@@ -129,12 +129,83 @@ def test_interactive_dns_search_queries_submitted_term_only(monkeypatch) -> None
     )
     monkeypatch.setattr("o2switch_cli.cli.interactive.TerminalUI.print_info", lambda self, message: None)
     monkeypatch.setattr(
-        "o2switch_cli.cli.interactive.TerminalUI.browse_pages",
-        lambda self, items, **kwargs: browsed.append(list(items)),
+        "o2switch_cli.cli.interactive.TerminalUI.print_hostname_search_results",
+        lambda self, items, page_window=None: rendered.append([item.hostname for item in items]),
     )
     monkeypatch.setattr("o2switch_cli.cli.interactive.TerminalUI.status", _noop_status)
+    monkeypatch.setattr("o2switch_cli.cli.interactive._page_size", lambda ui: 12)
 
     run_interactive_menu(_app_context())
 
     assert calls == ["name.ginutech.com"]
-    assert [item.hostname for item in browsed[0]] == ["name.ginutech.com"]
+    assert rendered[0] == ["name.ginutech.com"]
+
+
+def test_interactive_dns_search_can_refine_results_in_place(monkeypatch) -> None:
+    class FakeDomains:
+        def list_domains(self) -> list[DomainDescriptor]:
+            return [DomainDescriptor(domain="ginutech.com", type=DomainType.ADDON)]
+
+    class FakeSubdomains:
+        def search(self, term: str) -> list[SubdomainDescriptor]:
+            assert term == ""
+            return [SubdomainDescriptor(fqdn="app.ginutech.com", label="app", root_domain="ginutech.com")]
+
+    calls: list[str] = []
+
+    class FakeDNS:
+        def search(self, term: str) -> list[HostnameSearchResult]:
+            calls.append(term)
+            return [
+                HostnameSearchResult(
+                    category=SearchCategory.HOSTED_SUBDOMAINS,
+                    hostname="app.ginutech.com",
+                    zone="ginutech.com",
+                    managed_by_cpanel=True,
+                    docroot="/public_html/app",
+                ),
+                HostnameSearchResult(
+                    category=SearchCategory.DNS_RECORDS,
+                    hostname="_autodiscover._tcp.app.ginutech.com",
+                    record_type="SRV",
+                    value="0",
+                    zone="ginutech.com",
+                ),
+            ]
+
+    class FakeRuntime:
+        domains = FakeDomains()
+        subdomains = FakeSubdomains()
+        dns = FakeDNS()
+
+    answers = iter(["DNS: search", "Filter results", "Close results", "Exit"])
+    prompts = iter(["ginutech.com", "hosted"])
+    rendered: list[list[str]] = []
+
+    class FakeSelect:
+        def ask(self):
+            return next(answers)
+
+    monkeypatch.setattr(AppContext, "runtime", lambda self: FakeRuntime())
+    monkeypatch.setattr(
+        "o2switch_cli.cli.interactive.questionary.select",
+        lambda *args, **kwargs: FakeSelect(),
+    )
+    monkeypatch.setattr("o2switch_cli.cli.interactive.TerminalUI.print_banner", lambda self: None)
+    monkeypatch.setattr(
+        "o2switch_cli.cli.interactive.TerminalUI.prompt_realtime_search",
+        lambda self, *args, **kwargs: next(prompts),
+    )
+    monkeypatch.setattr("o2switch_cli.cli.interactive.TerminalUI.print_info", lambda self, message: None)
+    monkeypatch.setattr(
+        "o2switch_cli.cli.interactive.TerminalUI.print_hostname_search_results",
+        lambda self, items, page_window=None: rendered.append([item.hostname for item in items]),
+    )
+    monkeypatch.setattr("o2switch_cli.cli.interactive.TerminalUI.status", _noop_status)
+    monkeypatch.setattr("o2switch_cli.cli.interactive._page_size", lambda ui: 12)
+
+    run_interactive_menu(_app_context())
+
+    assert calls == ["ginutech.com"]
+    assert rendered[0] == ["app.ginutech.com", "_autodiscover._tcp.app.ginutech.com"]
+    assert rendered[1] == ["app.ginutech.com"]

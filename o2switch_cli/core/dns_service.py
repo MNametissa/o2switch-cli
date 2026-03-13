@@ -256,6 +256,36 @@ class DNSService:
             )
         return sorted(descriptors, key=lambda item: item.fqdn)
 
+    @staticmethod
+    def _search_rank(item: HostnameSearchResult, needle: str) -> tuple[int, ... | str]:
+        hostname = item.hostname.lower()
+        value = (item.value or "").lower()
+        zone = (item.zone or "").lower()
+        record_type = (item.record_type or "").upper()
+        exact_hostname = 0 if hostname == needle else 1
+        hosted_penalty = 0 if item.category is SearchCategory.HOSTED_SUBDOMAINS else 1
+        exact_zone = 0 if zone == needle else 1
+        exact_value = 0 if value == needle else 1
+        startswith_penalty = 0 if needle and hostname.startswith(needle) else 1
+        endswith_penalty = 0 if needle and hostname.endswith(f".{needle}") else 1
+        service_penalty = 1 if hostname.startswith("_") else 0
+        record_penalty = {"A": 0, "AAAA": 1, "CNAME": 1, "MX": 2, "TXT": 3, "SRV": 4}.get(record_type, 5)
+        length_penalty = abs(len(hostname) - len(needle)) if needle else len(hostname)
+        return (
+            exact_hostname,
+            hosted_penalty,
+            exact_zone,
+            exact_value,
+            startswith_penalty,
+            endswith_penalty,
+            service_penalty,
+            record_penalty,
+            length_penalty,
+            hostname,
+            item.category.value,
+            record_type,
+        )
+
     def search(self, term: str) -> list[HostnameSearchResult]:
         needle = term.strip().lower()
         matches: list[HostnameSearchResult] = []
@@ -287,7 +317,7 @@ class DNSService:
                         )
                     )
         if matches:
-            return sorted(matches, key=lambda item: (item.hostname, item.category.value, item.record_type or ""))
+            return sorted(matches, key=lambda item: self._search_rank(item, needle))
         try:
             hostname = normalize_hostname(term)
         except Exception:
