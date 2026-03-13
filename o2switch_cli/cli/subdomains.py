@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typer
 
+from o2switch_cli.cli.autocomplete import complete_root_domains, complete_subdomain_terms
 from o2switch_cli.cli.helpers import confirm_plan, exit_for_result_warning, run_guarded
 from o2switch_cli.cli.interactive_support import paginate_items
 from o2switch_cli.cli.ui import TerminalUI
@@ -12,7 +13,7 @@ app = typer.Typer(help="Manage hosted cPanel subdomains.", rich_markup_mode="ric
 @app.command("search")
 def search_subdomains(
     ctx: typer.Context,
-    term: str,
+    term: str = typer.Argument(..., autocompletion=complete_subdomain_terms),
     page: int = typer.Option(1, "--page", min=1, help="Result page number."),
     page_size: int = typer.Option(20, "--page-size", min=1, max=500, help="Results per page."),
 ) -> None:
@@ -29,7 +30,7 @@ def search_subdomains(
 @app.command("create")
 def create_subdomain(
     ctx: typer.Context,
-    root: str = typer.Option(..., "--root"),
+    root: str = typer.Option(..., "--root", autocompletion=complete_root_domains),
     label: str = typer.Option(..., "--label"),
     docroot: str | None = typer.Option(None, "--docroot"),
     ip: str | None = typer.Option(None, "--ip"),
@@ -62,7 +63,10 @@ def create_subdomain(
 
 
 @app.command("delete")
-def delete_subdomain(ctx: typer.Context, fqdn: str = typer.Option(..., "--fqdn")) -> None:
+def delete_subdomain(
+    ctx: typer.Context,
+    fqdn: str = typer.Option(..., "--fqdn", autocompletion=complete_subdomain_terms),
+) -> None:
     def action(app_context):
         ui = TerminalUI(app_context.console, app_context.output_format)
         with ui.status("Inspecting hosted subdomain state", spinner="dots12"):

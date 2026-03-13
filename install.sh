@@ -10,6 +10,7 @@ TEST_API=0
 ENV_FILE=".env"
 LINK_LOCAL_BIN=1
 LOCAL_BIN_DIR="${HOME}/.local/bin"
+COMPLETION_DIR="${HOME}/.local/share/bash-completion/completions"
 BASHRC_FILE="${HOME}/.bashrc"
 BASHRC_MARKER_START="# >>> o2switch-cli >>>"
 BASHRC_MARKER_END="# <<< o2switch-cli <<<"
@@ -116,6 +117,11 @@ fi
 echo "==> Installed successfully"
 echo "    Binary: $VENV_DIR/bin/o2switch-cli"
 
+echo "==> Installing bash completion"
+"$VENV_DIR/bin/o2switch-cli" completion install --shell bash >/dev/null
+echo "    $COMPLETION_DIR/o2switch-cli"
+echo "    $COMPLETION_DIR/o2switch_cli"
+
 if [[ "$LINK_LOCAL_BIN" -eq 1 ]]; then
   mkdir -p "$LOCAL_BIN_DIR"
   ln -sfn "$VENV_DIR/bin/o2switch-cli" "$LOCAL_BIN_DIR/o2switch-cli"
@@ -152,10 +158,12 @@ echo "Next steps:"
 if [[ "$LINK_LOCAL_BIN" -eq 1 ]]; then
   echo "  o2switch-cli --help"
   echo "  o2switch_cli --help"
+  echo "  o2switch-cli completion show"
   echo "  o2switch-cli config show"
   echo "  ./uninstall.sh"
 else
   echo "  $VENV_DIR/bin/o2switch-cli --help"
+  echo "  $VENV_DIR/bin/o2switch-cli completion show"
   echo "  $VENV_DIR/bin/o2switch-cli config show"
   echo "  ./uninstall.sh"
 fi

@@ -28,6 +28,9 @@ o2switch-cli --help
 o2switch_cli --help
 ```
 
+It also installs managed bash completion for both launcher names into
+`~/.local/share/bash-completion/completions/` and adds a managed sourcing block in `~/.bashrc`.
+
 Quand l'installateur detecte que `~/.local/bin` n'est pas deja gere dans `~/.bashrc`, il ajoute un bloc balise pour ce PATH. Apres installation ou desinstallation, rechargez votre shell courant:
 
 ```bash
@@ -82,6 +85,8 @@ Setup non interactive:
 
 ```bash
 .venv/bin/o2switch-cli --help
+.venv/bin/o2switch-cli completion show
+.venv/bin/o2switch-cli completion install
 .venv/bin/o2switch-cli config init --help
 .venv/bin/o2switch-cli domains list
 .venv/bin/o2switch-cli domains list --page 2 --page-size 10
@@ -94,6 +99,7 @@ Setup non interactive:
 
 Sans sous-commande, le binaire ouvre le mode interactif si le terminal est TTY.
 Le mode interactif inclut maintenant des spinners de chargement, une recherche temps reel avec suggestions pendant la frappe, et une navigation paginee pour les grands jeux de resultats.
+En mode commande, les sous-commandes, options, et valeurs principales (`--root`, `--host`, `--fqdn`, termes de recherche) sont autocompletables en bash.
 
 ## Development
 

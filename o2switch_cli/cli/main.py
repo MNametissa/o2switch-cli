@@ -5,6 +5,7 @@ from pathlib import Path
 
 import typer
 
+from o2switch_cli.cli.completion_cmd import app as completion_app
 from o2switch_cli.cli.config_cmd import app as config_app
 from o2switch_cli.cli.context import build_context
 from o2switch_cli.cli.dns import app as dns_app
@@ -25,6 +26,7 @@ app.add_typer(domains_app, name="domains", help="List and search account domains
 app.add_typer(dns_app, name="dns", help="Inspect and mutate DNS records.")
 app.add_typer(subdomains_app, name="subdomains", help="Manage hosted cPanel subdomains.")
 app.add_typer(config_app, name="config", help="Inspect configuration and API access.")
+app.add_typer(completion_app, name="completion", help="Manage shell autocomplete support.")
 
 
 @app.callback()

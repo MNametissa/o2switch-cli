@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typer
 
+from o2switch_cli.cli.autocomplete import complete_domain_terms
 from o2switch_cli.cli.helpers import run_guarded
 from o2switch_cli.cli.interactive_support import paginate_items
 from o2switch_cli.cli.ui import TerminalUI
@@ -28,7 +29,7 @@ def list_domains(
 @app.command("search")
 def search_domains(
     ctx: typer.Context,
-    term: str,
+    term: str = typer.Argument(..., autocompletion=complete_domain_terms),
     page: int = typer.Option(1, "--page", min=1, help="Result page number."),
     page_size: int = typer.Option(20, "--page-size", min=1, max=500, help="Results per page."),
 ) -> None:
