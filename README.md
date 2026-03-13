@@ -21,6 +21,16 @@ Development bootstrap:
 ./install.sh --dev
 ```
 
+Reusing an existing local install:
+
+```bash
+./install.sh
+./install.sh --dev
+./install.sh --reinstall
+```
+
+`install.sh` now reuses the existing `.venv` and skips `pip install -e` when `pyproject.toml` and the selected install profile are unchanged. This matches pip's editable-install behavior: reinstall is mainly needed when project metadata changes.
+
 The installer also publishes launchers into `~/.local/bin` by default:
 
 ```bash
@@ -41,8 +51,11 @@ Standalone uninstall:
 
 ```bash
 ./uninstall.sh
+./uninstall.sh --purge-venv
 ./uninstall.sh --purge-config --purge-state
 ```
+
+`./uninstall.sh` now removes launchers, completion, and managed shell wiring by default, but preserves `.venv` for faster reinstall. Use `--purge-venv` if you want a full local removal.
 
 ## Configuration
 

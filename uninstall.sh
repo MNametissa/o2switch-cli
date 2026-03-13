@@ -8,6 +8,7 @@ COMPLETION_DIR="${HOME}/.local/share/bash-completion/completions"
 ENV_FILE="$ROOT_DIR/.env"
 REMOVE_ENV=0
 REMOVE_STATE=0
+PURGE_VENV=0
 YES=0
 BASHRC_FILE="${HOME}/.bashrc"
 BASHRC_MARKER_START="# >>> o2switch-cli >>>"
@@ -74,6 +75,7 @@ Usage: ./uninstall.sh [OPTIONS]
 Remove the local o2switch-cli installation created by ./install.sh.
 
 Options:
+  --purge-venv     Also remove the repository .venv. By default it is kept for fast reinstall.
   --purge-config   Also remove the repository .env file.
   --purge-state    Also remove the default audit log file and its state directory.
   --yes            Do not ask for confirmation.
@@ -83,6 +85,10 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --purge-venv)
+      PURGE_VENV=1
+      shift
+      ;;
     --purge-config)
       REMOVE_ENV=1
       shift
@@ -112,11 +118,15 @@ STATE_DIR="$(dirname "$AUDIT_LOG_PATH")"
 
 if [[ "$YES" -ne 1 ]]; then
   echo "This will remove:"
-  echo "  $VENV_DIR"
   echo "  $LOCAL_BIN_DIR/o2switch-cli"
   echo "  $LOCAL_BIN_DIR/o2switch_cli"
   echo "  $COMPLETION_DIR/o2switch-cli"
   echo "  $COMPLETION_DIR/o2switch_cli"
+  if [[ "$PURGE_VENV" -eq 1 ]]; then
+    echo "  $VENV_DIR"
+  else
+    echo "  $VENV_DIR (preserved)"
+  fi
   if [[ "$REMOVE_ENV" -eq 1 ]]; then
     echo "  $ENV_FILE"
   fi
@@ -143,7 +153,9 @@ else
   remove_bashrc_completion_block
 fi
 
-rm -rf "$VENV_DIR"
+if [[ "$PURGE_VENV" -eq 1 ]]; then
+  rm -rf "$VENV_DIR"
+fi
 
 for launcher in "$LOCAL_BIN_DIR/o2switch-cli" "$LOCAL_BIN_DIR/o2switch_cli"; do
   if [[ -e "$launcher" || -L "$launcher" ]]; then
@@ -162,4 +174,7 @@ if [[ "$REMOVE_STATE" -eq 1 ]]; then
 fi
 
 echo "==> Uninstall completed"
+if [[ "$PURGE_VENV" -eq 0 ]]; then
+  echo "    Preserved $VENV_DIR for faster future installs"
+fi
 print_shell_refresh_note

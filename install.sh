@@ -3,12 +3,14 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$ROOT_DIR/.venv"
+INSTALL_STATE_FILE="$VENV_DIR/.o2switch-cli-install-state"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 PACKAGE_SPEC="."
 RUN_SETUP=1
 TEST_API=0
 ENV_FILE=".env"
 LINK_LOCAL_BIN=1
+FORCE_REINSTALL=0
 LOCAL_BIN_DIR="${HOME}/.local/bin"
 COMPLETION_DIR="${HOME}/.local/share/bash-completion/completions"
 BASHRC_FILE="${HOME}/.bashrc"
@@ -53,6 +55,15 @@ print_shell_refresh_note() {
   echo "    Run: source \"$BASHRC_FILE\" && hash -r"
 }
 
+compute_install_state() {
+  PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" - <<PY
+from pathlib import Path
+from o2switch_cli.install_support import compute_install_state
+
+print(compute_install_state(Path(r"$ROOT_DIR"), "$PACKAGE_SPEC"))
+PY
+}
+
 usage() {
   cat <<'EOF'
 Usage: ./install.sh [OPTIONS]
@@ -61,6 +72,7 @@ Bootstrap o2switch-cli in a local virtual environment and optionally run the set
 
 Options:
   --dev             Install development dependencies too.
+  --reinstall       Force `pip install -e` even when the existing venv metadata is unchanged.
   --skip-setup      Do not launch `o2switch-cli config init` after install.
   --test-api        Ask the setup command to test API access after writing credentials.
   --env-file PATH   Write credentials to PATH instead of .env.
@@ -73,6 +85,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --dev)
       PACKAGE_SPEC=".[dev]"
+      shift
+      ;;
+    --reinstall)
+      FORCE_REINSTALL=1
       shift
       ;;
     --skip-setup)
@@ -103,15 +119,43 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "==> Creating virtual environment in $VENV_DIR"
-"$PYTHON_BIN" -m venv "$VENV_DIR"
-
-echo "==> Installing o2switch-cli"
-"$VENV_DIR/bin/python" -m pip install --upgrade pip
-if [[ "$PACKAGE_SPEC" == ".[dev]" ]]; then
-  "$VENV_DIR/bin/python" -m pip install -e "${ROOT_DIR}[dev]"
+if [[ -x "$VENV_DIR/bin/python" ]]; then
+  echo "==> Reusing virtual environment in $VENV_DIR"
 else
-  "$VENV_DIR/bin/python" -m pip install -e "$ROOT_DIR"
+  echo "==> Creating virtual environment in $VENV_DIR"
+  "$PYTHON_BIN" -m venv "$VENV_DIR"
+fi
+
+DESIRED_INSTALL_STATE="$(compute_install_state)"
+CURRENT_INSTALL_STATE=""
+if [[ -f "$INSTALL_STATE_FILE" ]]; then
+  CURRENT_INSTALL_STATE="$(<"$INSTALL_STATE_FILE")"
+fi
+
+INSTALL_REASON=""
+if [[ "$FORCE_REINSTALL" -eq 1 ]]; then
+  INSTALL_REASON="forced reinstall"
+elif ! "$VENV_DIR/bin/python" -m pip show o2switch-cli >/dev/null 2>&1; then
+  INSTALL_REASON="package missing from venv"
+elif [[ ! -x "$VENV_DIR/bin/o2switch-cli" ]]; then
+  INSTALL_REASON="launcher missing from venv"
+elif [[ "$CURRENT_INSTALL_STATE" != "$DESIRED_INSTALL_STATE" ]]; then
+  INSTALL_REASON="project metadata changed"
+fi
+
+if [[ -n "$INSTALL_REASON" ]]; then
+  echo "==> Installing o2switch-cli"
+  echo "    Reason: $INSTALL_REASON"
+  "$VENV_DIR/bin/python" -m pip install --upgrade pip
+  if [[ "$PACKAGE_SPEC" == ".[dev]" ]]; then
+    "$VENV_DIR/bin/python" -m pip install -e "${ROOT_DIR}[dev]"
+  else
+    "$VENV_DIR/bin/python" -m pip install -e "$ROOT_DIR"
+  fi
+  printf '%s\n' "$DESIRED_INSTALL_STATE" > "$INSTALL_STATE_FILE"
+else
+  echo "==> Reusing existing editable install"
+  echo "    Metadata unchanged; skipping pip install"
 fi
 
 echo "==> Installed successfully"
