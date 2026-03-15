@@ -38,10 +38,11 @@ The installer also publishes launchers into `~/.local/bin` by default:
 ```bash
 o2switch-cli --version
 o2switch-cli --help
-o2switch_cli --help
 ```
 
-It also installs managed bash completion for both launcher names into
+`o2switch-cli` est l'unique commande shell publique. `o2switch_cli` reste seulement le nom du package Python et l'ancien alias shell est nettoye automatiquement lors d'une reinstallation.
+
+It also installs managed bash completion for `o2switch-cli` into
 `~/.local/share/bash-completion/completions/` and adds a managed sourcing block in `~/.bashrc`.
 
 Quand l'installateur detecte que `~/.local/bin` n'est pas deja gere dans `~/.bashrc`, il ajoute un bloc balise pour ce PATH. Apres installation ou desinstallation, rechargez votre shell courant:

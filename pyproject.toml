@@ -28,7 +28,6 @@ dev = [
 
 [project.scripts]
 o2switch-cli = "o2switch_cli.cli.main:run"
-o2switch_cli = "o2switch_cli.cli.main:run"
 
 [tool.setuptools.packages.find]
 include = ["o2switch_cli*"]

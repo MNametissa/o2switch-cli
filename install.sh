@@ -164,16 +164,14 @@ echo "    Binary: $VENV_DIR/bin/o2switch-cli"
 echo "==> Installing bash completion"
 "$VENV_DIR/bin/o2switch-cli" completion install --shell bash >/dev/null
 echo "    $COMPLETION_DIR/o2switch-cli"
-echo "    $COMPLETION_DIR/o2switch_cli"
 
 if [[ "$LINK_LOCAL_BIN" -eq 1 ]]; then
   mkdir -p "$LOCAL_BIN_DIR"
   ln -sfn "$VENV_DIR/bin/o2switch-cli" "$LOCAL_BIN_DIR/o2switch-cli"
-  ln -sfn "$VENV_DIR/bin/o2switch_cli" "$LOCAL_BIN_DIR/o2switch_cli"
+  rm -f "$LOCAL_BIN_DIR/o2switch_cli"
   ensure_bashrc_path_block
   echo "==> Published launchers"
   echo "    $LOCAL_BIN_DIR/o2switch-cli"
-  echo "    $LOCAL_BIN_DIR/o2switch_cli"
   case ":$PATH:" in
     *":$LOCAL_BIN_DIR:"*) ;;
     *)
@@ -201,7 +199,6 @@ echo
 echo "Next steps:"
 if [[ "$LINK_LOCAL_BIN" -eq 1 ]]; then
   echo "  o2switch-cli --help"
-  echo "  o2switch_cli --help"
   echo "  o2switch-cli completion show"
   echo "  o2switch-cli config show"
   echo "  ./uninstall.sh"

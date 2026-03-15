@@ -37,7 +37,7 @@ def test_completion_install_and_remove_support_json_output(tmp_path: Path) -> No
     assert install_result.exit_code == 0
     assert install_payload["shell"] == "bash"
     assert (completion_dir / "o2switch-cli").exists()
-    assert (completion_dir / "o2switch_cli").exists()
+    assert not (completion_dir / "o2switch_cli").exists()
 
     remove_result = runner.invoke(
         app,

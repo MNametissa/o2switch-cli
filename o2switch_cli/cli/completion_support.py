@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-COMMAND_NAMES: tuple[str, str] = ("o2switch-cli", "o2switch_cli")
+COMMAND_NAMES: tuple[str, ...] = ("o2switch-cli",)
+LEGACY_COMMAND_NAMES: tuple[str, ...] = ("o2switch_cli",)
 BASHRC_MARKER_START = "# >>> o2switch-cli completion >>>"
 BASHRC_MARKER_END = "# <<< o2switch-cli completion <<<"
 
@@ -106,6 +107,10 @@ def install_bash_completion(
 ) -> list[Path]:
     resolved_completion_dir = (completion_dir or default_bash_completion_dir()).expanduser()
     resolved_completion_dir.mkdir(parents=True, exist_ok=True)
+    for command_name in LEGACY_COMMAND_NAMES:
+        legacy_target = resolved_completion_dir / command_name
+        if legacy_target.exists():
+            legacy_target.unlink()
     written_files: list[Path] = []
     for command_name in command_names:
         target = resolved_completion_dir / command_name
@@ -127,7 +132,7 @@ def remove_bash_completion(
 ) -> list[Path]:
     resolved_completion_dir = (completion_dir or default_bash_completion_dir()).expanduser()
     removed_files: list[Path] = []
-    for command_name in command_names:
+    for command_name in (*command_names, *LEGACY_COMMAND_NAMES):
         target = resolved_completion_dir / command_name
         if target.exists():
             target.unlink()
