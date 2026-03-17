@@ -119,9 +119,9 @@ STATE_DIR="$(dirname "$AUDIT_LOG_PATH")"
 if [[ "$YES" -ne 1 ]]; then
   echo "This will remove:"
   echo "  $LOCAL_BIN_DIR/o2switch-cli"
-  echo "  $LOCAL_BIN_DIR/o2switch_cli"
   echo "  $COMPLETION_DIR/o2switch-cli"
-  echo "  $COMPLETION_DIR/o2switch_cli"
+  echo "  $LOCAL_BIN_DIR/o2switch_cli (legacy alias if present)"
+  echo "  $COMPLETION_DIR/o2switch_cli (legacy alias if present)"
   if [[ "$PURGE_VENV" -eq 1 ]]; then
     echo "  $VENV_DIR"
   else

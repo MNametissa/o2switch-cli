@@ -4,6 +4,7 @@ from pathlib import Path
 
 from o2switch_cli.cli.completion_support import (
     COMMAND_NAMES,
+    LEGACY_COMMAND_NAMES,
     bash_completion_script,
     install_bash_completion,
     remove_bash_completion,
@@ -31,7 +32,7 @@ def test_install_and_remove_bash_completion_manage_files_and_bashrc(tmp_path: Pa
     bashrc = bashrc_path.read_text()
     assert "# >>> o2switch-cli completion >>>" in bashrc
     assert str(completion_dir / "o2switch-cli") in bashrc
-    assert str(completion_dir / "o2switch_cli") in bashrc
+    assert str(completion_dir / "o2switch_cli") not in bashrc
     assert "['" not in bashrc
     assert '[[ -r "' in bashrc
     assert 'source "' in bashrc
@@ -51,3 +52,15 @@ def test_managed_bashrc_block_renders_shell_lines_not_python_list(tmp_path: Path
     rendered = (tmp_path / ".bashrc").read_text()
     assert "['" not in rendered
     assert ", '" not in rendered
+
+
+def test_install_bash_completion_removes_legacy_alias_file(tmp_path: Path) -> None:
+    completion_dir = tmp_path / "completions"
+    completion_dir.mkdir(parents=True)
+    legacy_target = completion_dir / LEGACY_COMMAND_NAMES[0]
+    legacy_target.write_text("legacy", encoding="utf-8")
+
+    written = install_bash_completion(completion_dir=completion_dir, bashrc_path=tmp_path / ".bashrc")
+
+    assert [path.name for path in written] == list(COMMAND_NAMES)
+    assert not legacy_target.exists()
