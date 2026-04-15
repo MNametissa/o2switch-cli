@@ -20,7 +20,7 @@ app = typer.Typer(
     invoke_without_command=True,
     no_args_is_help=False,
     rich_markup_mode="rich",
-    help="Interactive cPanel DNS and hosted subdomain operator.",
+    help="Manage DNS records, domains, and subdomains on o2switch/cPanel hosting.",
 )
 
 app.add_typer(domains_app, name="domains", help="List and search account domains.")

@@ -12,6 +12,10 @@ ENV_FILE=".env"
 LINK_LOCAL_BIN=1
 FORCE_REINSTALL=0
 LOCAL_BIN_DIR="${HOME}/.local/bin"
+GLOBAL_CONFIG_DIR="${HOME}/.config/o2switch-cli"
+CPANEL_HOST=""
+CPANEL_USER=""
+CPANEL_TOKEN=""
 COMPLETION_DIR="${HOME}/.local/share/bash-completion/completions"
 BASHRC_FILE="${HOME}/.bashrc"
 BASHRC_MARKER_START="# >>> o2switch-cli >>>"
@@ -68,16 +72,28 @@ usage() {
   cat <<'EOF'
 Usage: ./install.sh [OPTIONS]
 
-Bootstrap o2switch-cli in a local virtual environment and optionally run the setup wizard.
+Bootstrap o2switch-cli in a local virtual environment and run the setup wizard.
+Credentials are stored globally in ~/.config/o2switch-cli/.env by default.
 
 Options:
-  --dev             Install development dependencies too.
-  --reinstall       Force `pip install -e` even when the existing venv metadata is unchanged.
-  --skip-setup      Do not launch `o2switch-cli config init` after install.
-  --test-api        Ask the setup command to test API access after writing credentials.
-  --env-file PATH   Write credentials to PATH instead of .env.
-  --no-link         Do not publish launchers into ~/.local/bin.
-  --help            Show this message and exit.
+  --dev                    Install development dependencies too.
+  --reinstall              Force pip install even when metadata is unchanged.
+  --skip-setup             Do not launch the setup wizard after install.
+  --test-api               Test API access after writing credentials.
+  --no-link                Do not publish launchers into ~/.local/bin.
+
+Credentials (for non-interactive or scripted installs):
+  --cpanel-host HOST       cPanel hostname (e.g. saule.o2switch.net)
+  --cpanel-user USER       cPanel username
+  --cpanel-token TOKEN     cPanel API token
+
+Examples:
+  ./install.sh                                    # Interactive setup
+  ./install.sh --dev                              # With dev dependencies
+  ./install.sh --cpanel-host saule.o2switch.net --cpanel-user myuser --cpanel-token mytoken
+  ./install.sh --skip-setup                       # Install only, configure later
+
+  --help                   Show this message and exit.
 EOF
 }
 
@@ -106,6 +122,18 @@ while [[ $# -gt 0 ]]; do
     --no-link)
       LINK_LOCAL_BIN=0
       shift
+      ;;
+    --cpanel-host)
+      CPANEL_HOST="$2"
+      shift 2
+      ;;
+    --cpanel-user)
+      CPANEL_USER="$2"
+      shift 2
+      ;;
+    --cpanel-token)
+      CPANEL_TOKEN="$2"
+      shift 2
       ;;
     --help)
       usage
@@ -182,16 +210,33 @@ if [[ "$LINK_LOCAL_BIN" -eq 1 ]]; then
 fi
 
 if [[ "$RUN_SETUP" -eq 1 ]]; then
-  if [[ -t 0 ]]; then
+  # Build setup args
+  SETUP_ARGS=(config init)
+  if [[ "$TEST_API" -eq 1 ]]; then
+    SETUP_ARGS+=(--test-api)
+  fi
+  if [[ -n "$CPANEL_HOST" ]]; then
+    SETUP_ARGS+=(--cpanel-host "$CPANEL_HOST")
+  fi
+  if [[ -n "$CPANEL_USER" ]]; then
+    SETUP_ARGS+=(--cpanel-user "$CPANEL_USER")
+  fi
+  if [[ -n "$CPANEL_TOKEN" ]]; then
+    SETUP_ARGS+=(--cpanel-token "$CPANEL_TOKEN")
+  fi
+
+  # Non-interactive if all credentials provided
+  if [[ -n "$CPANEL_HOST" && -n "$CPANEL_USER" && -n "$CPANEL_TOKEN" ]]; then
+    echo "==> Configuring with provided credentials"
+    SETUP_ARGS+=(--non-interactive --force)
+    "$VENV_DIR/bin/o2switch-cli" "${SETUP_ARGS[@]}"
+  elif [[ -t 0 ]]; then
     echo "==> Launching setup wizard"
-    SETUP_ARGS=(config init --path "$ENV_FILE")
-    if [[ "$TEST_API" -eq 1 ]]; then
-      SETUP_ARGS+=(--test-api)
-    fi
+    echo "    Credentials will be stored in $GLOBAL_CONFIG_DIR/.env"
     "$VENV_DIR/bin/o2switch-cli" "${SETUP_ARGS[@]}"
   else
     echo "==> Non-interactive shell detected, skipping setup wizard"
-    echo "    Run: $VENV_DIR/bin/o2switch-cli config init --path $ENV_FILE"
+    echo "    Run: o2switch-cli config init"
   fi
 fi
 

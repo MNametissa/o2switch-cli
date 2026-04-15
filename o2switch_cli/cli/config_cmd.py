@@ -10,7 +10,7 @@ from o2switch_cli.cli.ui import TerminalUI
 from o2switch_cli.config.settings import AppSettings, default_audit_log_path, find_env_file, global_config_path, settings_summary, write_env_file
 from o2switch_cli.core.errors import ValidationAppError
 
-app = typer.Typer(help="Inspect active configuration and API reachability.", rich_markup_mode="rich")
+app = typer.Typer(help="Manage cPanel credentials and configuration.", rich_markup_mode="rich")
 
 
 @app.command("show")

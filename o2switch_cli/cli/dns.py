@@ -7,7 +7,7 @@ from o2switch_cli.cli.helpers import confirm_plan, exit_for_result_warning, run_
 from o2switch_cli.cli.interactive_support import paginate_items
 from o2switch_cli.cli.ui import TerminalUI
 
-app = typer.Typer(help="Search, upsert, delete, and verify DNS records.", rich_markup_mode="rich")
+app = typer.Typer(help="Manage DNS A records. Point hostnames to IPs, search, and verify.", rich_markup_mode="rich")
 
 
 @app.command("search")

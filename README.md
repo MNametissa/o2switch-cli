@@ -7,119 +7,140 @@ Version actuelle: `0.1.0`
 ## Installation
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
-```
-
-Standalone bootstrap:
-
-```bash
 ./install.sh
 ```
 
-Development bootstrap:
+The installer:
+- Creates a local virtual environment
+- Installs the CLI and dependencies
+- Prompts for cPanel credentials (stored in `~/.config/o2switch-cli/.env`)
+- Publishes `o2switch-cli` to `~/.local/bin`
+- Installs bash completion
 
-```bash
-./install.sh --dev
-```
-
-Reusing an existing local install:
-
-```bash
-./install.sh
-./install.sh --dev
-./install.sh --reinstall
-```
-
-`install.sh` now reuses the existing `.venv` and skips `pip install -e` when `pyproject.toml` and the selected install profile are unchanged. This matches pip's editable-install behavior: reinstall is mainly needed when project metadata changes.
-
-The installer also publishes launchers into `~/.local/bin` by default:
-
-```bash
-o2switch-cli --version
-o2switch-cli --help
-```
-
-`o2switch-cli` est l'unique commande shell publique. `o2switch_cli` reste seulement le nom du package Python et l'ancien alias shell est nettoye automatiquement lors d'une reinstallation.
-
-It also installs managed bash completion for `o2switch-cli` into
-`~/.local/share/bash-completion/completions/` and adds a managed sourcing block in `~/.bashrc`.
-
-Quand l'installateur detecte que `~/.local/bin` n'est pas deja gere dans `~/.bashrc`, il ajoute un bloc balise pour ce PATH. Apres installation ou desinstallation, rechargez votre shell courant:
+After install, reload your shell:
 
 ```bash
 source ~/.bashrc && hash -r
 ```
 
-Standalone uninstall:
+### Non-interactive install
+
+```bash
+./install.sh --cpanel-host saule.o2switch.net --cpanel-user myuser --cpanel-token mytoken
+```
+
+### Development install
+
+```bash
+./install.sh --dev
+```
+
+### Skip setup wizard
+
+```bash
+./install.sh --skip-setup
+o2switch-cli config init  # configure later
+```
+
+### Uninstall
 
 ```bash
 ./uninstall.sh
-./uninstall.sh --purge-venv
-./uninstall.sh --purge-config --purge-state
+./uninstall.sh --purge-venv --purge-config --purge-state
 ```
-
-`./uninstall.sh` now removes launchers, completion, and managed shell wiring by default, but preserves `.venv` for faster reinstall. Use `--purge-venv` if you want a full local removal.
 
 ## Configuration
 
-Convention de nommage:
+Credentials are stored globally in `~/.config/o2switch-cli/.env` and loaded automatically.
 
-- binaire CLI: `o2switch-cli`
-- package Python: `o2switch_cli`
-- variables d'environnement: `O2SWITCH_CLI_*`
+```bash
+# Show current config and where it's loaded from
+o2switch-cli config show
 
-Variables attendues:
+# Show config file paths (active, global, local)
+o2switch-cli config path
+
+# Re-run setup wizard
+o2switch-cli config init
+
+# Test API access
+o2switch-cli config test
+```
+
+### Config file locations
+
+1. **Local** `.env` in current directory (takes precedence)
+2. **Global** `~/.config/o2switch-cli/.env` (default)
+
+### Environment variables
+
+You can also set credentials via environment variables:
 
 ```bash
 export O2SWITCH_CLI_CPANEL_HOST=saule.o2switch.net
-export O2SWITCH_CLI_CPANEL_USER=mon_user
-export O2SWITCH_CLI_CPANEL_TOKEN=mon_token
+export O2SWITCH_CLI_CPANEL_USER=myuser
+export O2SWITCH_CLI_CPANEL_TOKEN=mytoken
 ```
 
-Setup guidee:
+### Getting a cPanel API token
 
-```bash
-.venv/bin/o2switch-cli config init
-.venv/bin/o2switch-cli config init --path .env --test-api
-```
-
-Par defaut, l'audit est ecrit dans le repertoire d'etat utilisateur de la plateforme.
-Sous Linux, cela devient typiquement `~/.local/state/o2switch-cli/audit.jsonl`.
-
-Setup non interactive:
-
-```bash
-.venv/bin/o2switch-cli config init \
-  --path .env \
-  --cpanel-host saule.o2switch.net \
-  --cpanel-user mon_user \
-  --cpanel-token mon_token \
-  --non-interactive
-```
+1. Log into cPanel
+2. Go to Security > Manage API Tokens
+3. Create a new token with appropriate permissions
+4. Copy the token (it's only shown once)
 
 ## Usage
 
 ```bash
-.venv/bin/o2switch-cli --version
-.venv/bin/o2switch-cli --help
-.venv/bin/o2switch-cli completion show
-.venv/bin/o2switch-cli completion install
-.venv/bin/o2switch-cli config init --help
-.venv/bin/o2switch-cli domains list
-.venv/bin/o2switch-cli domains list --page 2 --page-size 10
-.venv/bin/o2switch-cli dns upsert --host odoo-staging.ginutech.com --ip 203.0.113.25
-.venv/bin/o2switch-cli dns upsert --zone ginutech.com --host odoo-staging --ip 203.0.113.25
-.venv/bin/o2switch-cli dns search ginutech --page-size 15
-.venv/bin/o2switch-cli dns delete --zone ginutech.com --host odoo-staging --dry-run
-.venv/bin/o2switch-cli subdomains create --root ginutech.com --label odoo-staging --ip 203.0.113.25
-.venv/bin/o2switch-cli config show --json
+o2switch-cli              # Interactive mode (if TTY)
+o2switch-cli --help       # Show all commands
 ```
 
-Sans sous-commande, le binaire ouvre le mode interactif si le terminal est TTY.
-Le mode interactif inclut maintenant des spinners de chargement, une recherche temps reel avec suggestions pendant la frappe, et une navigation paginee pour les grands jeux de resultats.
-En mode commande, les sous-commandes, options, et valeurs principales (`--root`, `--host`, `--fqdn`, termes de recherche) sont autocompletables en bash.
-Les commandes DNS acceptent `--zone` pour forcer explicitement la zone DNS cible. Quand `--zone` est fournie, `--host` peut etre un label simple (`odoo-staging`) ou un FQDN deja inclus dans cette zone.
+### DNS Records
+
+```bash
+# Point a hostname to an IP (create or update A record)
+o2switch-cli dns upsert --host staging.example.com --ip 203.0.113.25
+
+# With explicit zone and custom TTL
+o2switch-cli dns upsert --zone example.com --host staging --ip 203.0.113.25 --ttl 600
+
+# Search DNS records
+o2switch-cli dns search example
+
+# Delete an A record
+o2switch-cli dns delete --host staging.example.com
+
+# Verify DNS resolution
+o2switch-cli dns verify --host staging.example.com --ip 203.0.113.25
+
+# Dry run (show what would change without applying)
+o2switch-cli dns upsert --host staging.example.com --ip 203.0.113.25 --dry-run
+```
+
+### Domains
+
+```bash
+o2switch-cli domains list
+o2switch-cli domains list --page 2 --page-size 10
+```
+
+### Subdomains
+
+```bash
+o2switch-cli subdomains create --root example.com --label staging --ip 203.0.113.25
+o2switch-cli subdomains list
+o2switch-cli subdomains delete --fqdn staging.example.com
+```
+
+### Output formats
+
+```bash
+o2switch-cli domains list --json
+o2switch-cli config show --json
+```
+
+Interactive mode includes loading spinners, real-time search suggestions, and paginated navigation.
 
 ## Versioning
 
