@@ -58,7 +58,8 @@ def test_config(ctx: typer.Context) -> None:
     run_guarded(ctx, action)
 
 
-@app.command("init")
+@app.command("setup")
+@app.command("init", hidden=True)
 def init_config(
     ctx: typer.Context,
     path: Path | None = typer.Option(None, "--path", help="Write credentials to this file. Defaults to global config."),
