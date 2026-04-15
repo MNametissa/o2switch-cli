@@ -46,7 +46,7 @@ class AppContext:
                 audit_log_path=self.settings.audit_log_path,
                 actor=self.settings.cpanel_user or "system",
             )
-            domains = DomainService(client)
+            domains = DomainService(client, default_domain=self.settings.default_domain)
             resolver = DNSResolver()
             dns = DNSService(client, domains, resolver, audit, self.settings.reserved_labels)
             subdomains = SubdomainService(

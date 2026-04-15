@@ -7,8 +7,9 @@ from o2switch_cli.core.validators import normalize_hostname, select_root_domain
 
 
 class DomainService:
-    def __init__(self, client: CpanelClient) -> None:
+    def __init__(self, client: CpanelClient, default_domain: str | None = None) -> None:
         self._client = client
+        self._default_domain = normalize_hostname(default_domain) if default_domain else None
 
     def list_domains(self) -> list[DomainDescriptor]:
         payload = self._client.list_domains().data or {}
@@ -40,7 +41,17 @@ class DomainService:
         append_many(payload.get("parked_domains", []) or [], DomainType.PARKED)
         append_many(payload.get("sub_domains", []) or [], DomainType.SUBDOMAIN)
         deduped = {item.domain: item for item in descriptors}
-        return sorted(deduped.values(), key=lambda item: (item.type.value, item.domain))
+        result = sorted(deduped.values(), key=lambda item: (item.type.value, item.domain))
+
+        # Filter by default_domain if set
+        if self._default_domain:
+            result = [
+                item for item in result
+                if item.domain == self._default_domain
+                or item.domain.endswith(f".{self._default_domain}")
+            ]
+
+        return result
 
     def root_domains(self) -> list[str]:
         return [item.domain for item in self.list_domains() if item.type is not DomainType.SUBDOMAIN]

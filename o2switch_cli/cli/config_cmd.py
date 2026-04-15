@@ -68,6 +68,7 @@ def init_config(
     cpanel_token: str | None = typer.Option(None, "--cpanel-token", help="cPanel API token (if using token auth)."),
     cpanel_password: str | None = typer.Option(None, "--cpanel-password", help="cPanel password (if using password auth)."),
     use_password: bool = typer.Option(False, "--password", "-p", help="Use password instead of API token."),
+    domain: str | None = typer.Option(None, "--domain", "-d", help="Limit operations to this domain only."),
     default_ttl: int | None = typer.Option(None, "--default-ttl", help="Default TTL to write into the env file."),
     audit_log_path: str | None = typer.Option(
         None,
@@ -147,6 +148,16 @@ def init_config(
                 ui.console.print("[dim]  Security > Manage API Tokens > Create[/]\n")
                 secret = secret or questionary.password("cPanel API token").ask()
 
+            # Ask for domain restriction
+            if not domain:
+                ui.console.print("\n[dim]Limit operations to a single domain (optional):[/]")
+                domain_input = questionary.text(
+                    "Default domain",
+                    instruction="(leave empty for all domains)"
+                ).ask()
+                if domain_input:
+                    domain = domain_input.strip().lower()
+
         host = host.strip() if host else None
         user = user.strip() if user else None
         secret = secret.strip() if secret else None
@@ -175,6 +186,7 @@ def init_config(
             cpanel_user=user,
             cpanel_token=secret,
             auth_method=auth_method,
+            default_domain=domain or None,
             port=current.port,
             timeout_seconds=current.timeout_seconds,
             default_ttl=ttl,

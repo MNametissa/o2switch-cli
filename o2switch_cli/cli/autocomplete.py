@@ -64,7 +64,7 @@ def completion_runtime(ctx: typer.Context | None) -> Iterator[CompletionRuntime 
             audit_log_path=settings.audit_log_path,
             actor=settings.cpanel_user or "completion",
         )
-        domains = DomainService(client)
+        domains = DomainService(client, default_domain=settings.default_domain)
         dns = DNSService(client, domains, DNSResolver(), audit, settings.reserved_labels)
         subdomains = SubdomainService(client, domains, dns, audit, settings.reserved_labels)
         yield CompletionRuntime(client=client, domains=domains, dns=dns, subdomains=subdomains)

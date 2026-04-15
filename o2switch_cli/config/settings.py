@@ -52,6 +52,7 @@ class AppSettings(BaseSettings):
     cpanel_user: str | None = None
     cpanel_token: SecretStr | None = None  # token or password depending on auth_method
     auth_method: Literal["token", "password"] = "token"
+    default_domain: str | None = None  # limit operations to this domain only
     port: int = 2083
     timeout_seconds: float = 20.0
     default_ttl: int = 300
@@ -121,6 +122,7 @@ def render_env_file(settings: AppSettings) -> str:
         f"O2SWITCH_CLI_CPANEL_USER={_dotenv_value(settings.cpanel_user)}",
         f"O2SWITCH_CLI_CPANEL_TOKEN={_dotenv_value(token)}",
         f"O2SWITCH_CLI_AUTH_METHOD={_dotenv_value(settings.auth_method)}",
+        f"O2SWITCH_CLI_DEFAULT_DOMAIN={_dotenv_value(settings.default_domain)}",
         f"O2SWITCH_CLI_PORT={_dotenv_value(settings.port)}",
         f"O2SWITCH_CLI_TIMEOUT_SECONDS={_dotenv_value(settings.timeout_seconds)}",
         f"O2SWITCH_CLI_DEFAULT_TTL={_dotenv_value(settings.default_ttl)}",
