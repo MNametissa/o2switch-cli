@@ -13,9 +13,11 @@ from o2switch_cli.core.models import ApiResult
 
 class CpanelClient:
     def __init__(self, settings: AppSettings, client: httpx.Client | None = None) -> None:
+        if not settings.cpanel_user:
+            raise AuthAppError("cpanel_client_init", "cpanel_user is required but not configured.")
         self._settings = settings
         headers = {
-            **auth_header(settings.cpanel_user or "", settings.cpanel_token),  # type: ignore[arg-type]
+            **auth_header(settings.cpanel_user, settings.cpanel_token),  # type: ignore[arg-type]
             "User-Agent": "o2switch-cli/0.1.0",
             "Accept": "application/json",
         }
