@@ -8,6 +8,17 @@ dynamic = ["version"]
 description = "Interactive CLI for managing o2switch/cPanel domains, subdomains, and DNS records."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "MNametissa"}]
+keywords = ["o2switch", "cpanel", "dns", "cli", "domains"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: Name Service (DNS)",
+]
 dependencies = [
   "dnspython>=2.6,<3.0",
   "httpx>=0.27,<1.0",
@@ -28,6 +39,10 @@ dev = [
 
 [project.scripts]
 o2switch-cli = "o2switch_cli.cli.main:run"
+
+[project.urls]
+Homepage = "https://github.com/MNametissa/o2switch-cli"
+Repository = "https://github.com/MNametissa/o2switch-cli"
 
 [tool.setuptools.packages.find]
 include = ["o2switch_cli*"]
