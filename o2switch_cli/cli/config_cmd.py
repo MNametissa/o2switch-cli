@@ -105,12 +105,11 @@ def init_config(
             auth_choice = questionary.select(
                 "Authentication method:",
                 choices=[
-                    {"name": "Password (cPanel login password)", "value": "password"},
-                    {"name": "API Token (generate in cPanel > Security > Manage API Tokens)", "value": "token"},
+                    "Password (cPanel login password)",
+                    "API Token (generate in cPanel > Security > Manage API Tokens)",
                 ],
-                default="password",
             ).ask()
-            auth_method = auth_choice or "password"
+            auth_method = "token" if auth_choice and "Token" in auth_choice else "password"
 
         host = cpanel_host or current.cpanel_host
         user = cpanel_user or current.cpanel_user

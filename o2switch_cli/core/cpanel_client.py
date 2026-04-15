@@ -19,7 +19,7 @@ class CpanelClient:
         use_basic = settings.auth_method == "password"
         headers = {
             **auth_header(settings.cpanel_user, settings.cpanel_token, use_basic=use_basic),  # type: ignore[arg-type]
-            "User-Agent": "o2switch-cli/0.1.2",
+            "User-Agent": "o2switch-cli/0.1.3",
             "Accept": "application/json",
         }
         self._client = client or httpx.Client(
