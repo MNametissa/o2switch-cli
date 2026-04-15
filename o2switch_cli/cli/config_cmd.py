@@ -7,7 +7,7 @@ import typer
 
 from o2switch_cli.cli.helpers import run_guarded
 from o2switch_cli.cli.ui import TerminalUI
-from o2switch_cli.config.settings import AppSettings, default_audit_log_path, settings_summary, write_env_file
+from o2switch_cli.config.settings import AppSettings, default_audit_log_path, find_env_file, global_config_path, settings_summary, write_env_file
 from o2switch_cli.core.errors import ValidationAppError
 
 app = typer.Typer(help="Inspect active configuration and API reachability.", rich_markup_mode="rich")
@@ -17,7 +17,26 @@ app = typer.Typer(help="Inspect active configuration and API reachability.", ric
 def show_config(ctx: typer.Context) -> None:
     def action(app_context):
         ui = TerminalUI(app_context.console, app_context.output_format)
-        ui.print_mapping("Active Configuration", settings_summary(app_context.settings))
+        summary = settings_summary(app_context.settings)
+        summary["config_file"] = find_env_file() or "(none found)"
+        ui.print_mapping("Active Configuration", summary)
+
+    run_guarded(ctx, action)
+
+
+@app.command("path")
+def show_path(ctx: typer.Context) -> None:
+    """Show configuration file paths."""
+    def action(app_context):
+        ui = TerminalUI(app_context.console, app_context.output_format)
+        ui.print_mapping(
+            "Config Paths",
+            {
+                "active": find_env_file() or "(none)",
+                "global": str(global_config_path()),
+                "local": str(Path(".env").resolve()),
+            },
+        )
 
     run_guarded(ctx, action)
 
@@ -42,7 +61,7 @@ def test_config(ctx: typer.Context) -> None:
 @app.command("init")
 def init_config(
     ctx: typer.Context,
-    path: Path = typer.Option(Path(".env"), "--path", help="Write credentials and defaults to this dotenv file."),
+    path: Path | None = typer.Option(None, "--path", help="Write credentials to this file. Defaults to global config."),
     cpanel_host: str | None = typer.Option(None, "--cpanel-host", help="cPanel host, for example saule.o2switch.net."),
     cpanel_user: str | None = typer.Option(None, "--cpanel-user", help="cPanel username."),
     cpanel_token: str | None = typer.Option(None, "--cpanel-token", help="cPanel API token."),
@@ -61,7 +80,7 @@ def init_config(
     def action(app_context):
         ui = TerminalUI(app_context.console, app_context.output_format)
         current = app_context.settings
-        target = path.expanduser().resolve()
+        target = (path or global_config_path()).expanduser().resolve()
 
         if target.exists() and not force and not non_interactive:
             if not ui.confirm(f"{target} already exists. Overwrite it?"):

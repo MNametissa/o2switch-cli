@@ -5,7 +5,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
-from platformdirs import user_state_dir
+from platformdirs import user_config_dir, user_state_dir
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,10 +24,25 @@ def default_audit_log_path() -> str:
     return str(Path(user_state_dir(APP_NAME)) / "audit.jsonl")
 
 
+def global_config_path() -> Path:
+    return Path(user_config_dir(APP_NAME)) / ".env"
+
+
+def find_env_file() -> str | None:
+    """Find .env file: local first, then global."""
+    local = Path(".env")
+    if local.exists():
+        return str(local)
+    global_path = global_config_path()
+    if global_path.exists():
+        return str(global_path)
+    return None
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="O2SWITCH_CLI_",
-        env_file=".env",
+        env_file=find_env_file(),
         env_file_encoding="utf-8",
         env_ignore_empty=True,
         extra="ignore",
