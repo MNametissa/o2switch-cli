@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 import questionary
 from pydantic import SecretStr
 
@@ -24,5 +26,10 @@ def ensure_credentials(settings: AppSettings, *, allow_prompt: bool) -> AppSetti
     return merged
 
 
-def auth_header(user: str, token: SecretStr) -> dict[str, str]:
-    return {"Authorization": f"cpanel {user}:{token.get_secret_value()}"}
+def auth_header(user: str, token: SecretStr, *, use_basic: bool = False) -> dict[str, str]:
+    """Generate auth header. use_basic=True for password auth."""
+    secret = token.get_secret_value()
+    if use_basic:
+        encoded = base64.b64encode(f"{user}:{secret}".encode()).decode()
+        return {"Authorization": f"Basic {encoded}"}
+    return {"Authorization": f"cpanel {user}:{secret}"}

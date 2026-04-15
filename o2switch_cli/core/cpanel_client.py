@@ -16,9 +16,10 @@ class CpanelClient:
         if not settings.cpanel_user:
             raise AuthAppError("cpanel_client_init", "cpanel_user is required but not configured.")
         self._settings = settings
+        use_basic = settings.auth_method == "password"
         headers = {
-            **auth_header(settings.cpanel_user, settings.cpanel_token),  # type: ignore[arg-type]
-            "User-Agent": "o2switch-cli/0.1.0",
+            **auth_header(settings.cpanel_user, settings.cpanel_token, use_basic=use_basic),  # type: ignore[arg-type]
+            "User-Agent": "o2switch-cli/0.1.2",
             "Accept": "application/json",
         }
         self._client = client or httpx.Client(

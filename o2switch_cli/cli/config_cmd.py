@@ -65,7 +65,9 @@ def init_config(
     path: Path | None = typer.Option(None, "--path", help="Write credentials to this file. Defaults to global config."),
     cpanel_host: str | None = typer.Option(None, "--cpanel-host", help="cPanel host, for example saule.o2switch.net."),
     cpanel_user: str | None = typer.Option(None, "--cpanel-user", help="cPanel username."),
-    cpanel_token: str | None = typer.Option(None, "--cpanel-token", help="cPanel API token."),
+    cpanel_token: str | None = typer.Option(None, "--cpanel-token", help="cPanel API token (if using token auth)."),
+    cpanel_password: str | None = typer.Option(None, "--cpanel-password", help="cPanel password (if using password auth)."),
+    use_password: bool = typer.Option(False, "--password", "-p", help="Use password instead of API token."),
     default_ttl: int | None = typer.Option(None, "--default-ttl", help="Default TTL to write into the env file."),
     audit_log_path: str | None = typer.Option(
         None,
@@ -78,6 +80,13 @@ def init_config(
     force: bool = typer.Option(False, "--force", help="Overwrite an existing env file without confirmation."),
     test_api: bool = typer.Option(False, "--test-api/--no-test-api", help="Test cPanel API access after writing."),
 ) -> None:
+    """Configure cPanel credentials.
+
+    Examples:
+        o2switch-cli config setup                    # Interactive setup
+        o2switch-cli config setup --password         # Use password instead of token
+        o2switch-cli config setup --cpanel-user xxx  # Pre-fill username
+    """
     def action(app_context):
         ui = TerminalUI(app_context.console, app_context.output_format)
         current = app_context.settings
@@ -90,9 +99,22 @@ def init_config(
         elif target.exists() and not force and non_interactive:
             raise ValidationAppError("config_init", f"{target} already exists. Use --force to overwrite.", str(target))
 
+        # Determine auth method
+        auth_method = "password" if use_password or cpanel_password else current.auth_method
+        if not non_interactive and not cpanel_token and not cpanel_password:
+            auth_choice = questionary.select(
+                "Authentication method:",
+                choices=[
+                    {"name": "Password (cPanel login password)", "value": "password"},
+                    {"name": "API Token (generate in cPanel > Security > Manage API Tokens)", "value": "token"},
+                ],
+                default="password",
+            ).ask()
+            auth_method = auth_choice or "password"
+
         host = cpanel_host or current.cpanel_host
         user = cpanel_user or current.cpanel_user
-        token = cpanel_token or (current.cpanel_token.get_secret_value() if current.cpanel_token else None)
+        secret = cpanel_password or cpanel_token or (current.cpanel_token.get_secret_value() if current.cpanel_token else None)
         ttl = default_ttl if default_ttl is not None else current.default_ttl
         audit_path = (
             audit_log_path
@@ -101,36 +123,59 @@ def init_config(
         )
 
         if not non_interactive:
-            host = host or questionary.text("cPanel host", default=current.cpanel_host or "").ask()
-            user = user or questionary.text("cPanel user", default=current.cpanel_user or "").ask()
-            token = token or questionary.password("cPanel API token").ask()
-            ttl_text = questionary.text("Default TTL", default=str(ttl)).ask() or str(ttl)
-            try:
-                ttl = int(ttl_text)
-            except ValueError as exc:
-                raise ValidationAppError("config_init", "Default TTL must be an integer.", str(target)) from exc
-            audit_path = questionary.text("Audit log path", default=audit_path).ask() or audit_path
+            user = user or questionary.text("cPanel username").ask()
+            # o2switch server selection
+            if not host:
+                ui.console.print("\n[dim]Your o2switch server name is shown in your cPanel URL:[/]")
+                ui.console.print("[dim]  https://[bold]SERVER[/].o2switch.net:2083[/]\n")
+                server_name = questionary.text(
+                    "o2switch server name",
+                    instruction="(just the name: saule, if, herse, etc.)"
+                ).ask()
+                if server_name:
+                    server_name = server_name.strip().lower()
+                    if not server_name.endswith(".o2switch.net"):
+                        host = f"{server_name}.o2switch.net"
+                    else:
+                        host = server_name
+            else:
+                host = questionary.text("cPanel server", default=host).ask()
+
+            if auth_method == "password":
+                secret = secret or questionary.password("cPanel password").ask()
+            else:
+                ui.console.print("\n[dim]Generate a token in cPanel:[/]")
+                ui.console.print("[dim]  Security > Manage API Tokens > Create[/]\n")
+                secret = secret or questionary.password("cPanel API token").ask()
 
         host = host.strip() if host else None
         user = user.strip() if user else None
-        token = token.strip() if token else None
+        secret = secret.strip() if secret else None
         audit_path = (
             audit_path.strip()
             if isinstance(audit_path, str) and audit_path.strip()
             else default_audit_log_path()
         )
 
-        if not host or not user or not token:
+        if not host or not user or not secret:
+            missing = []
+            if not host:
+                missing.append("host")
+            if not user:
+                missing.append("user")
+            if not secret:
+                missing.append("password" if auth_method == "password" else "token")
             raise ValidationAppError(
                 "config_init",
-                "cpanel host, user, and token are required.",
+                f"Missing required fields: {', '.join(missing)}",
                 str(target),
             )
 
         settings = AppSettings(
             cpanel_host=host,
             cpanel_user=user,
-            cpanel_token=token,
+            cpanel_token=secret,
+            auth_method=auth_method,
             port=current.port,
             timeout_seconds=current.timeout_seconds,
             default_ttl=ttl,
@@ -141,13 +186,12 @@ def init_config(
         )
         written = write_env_file(target, settings)
         ui.print_mapping(
-            "Setup Written",
+            "Setup Complete",
             {
-                "path": str(written),
+                "config_file": str(written),
                 "cpanel_host": host,
                 "cpanel_user": user,
-                "default_ttl": ttl,
-                "audit_log_path": audit_path,
+                "auth_method": auth_method,
             },
         )
 
