@@ -89,6 +89,12 @@ def init_config(
         o2switch-cli config setup --cpanel-user xxx  # Pre-fill username
     """
     def action(app_context):
+        # Sans ce nonlocal, l'affectation « domain = ... » plus bas fait de
+        # domain une variable LOCALE a action, et la lecture « if not domain »
+        # qui la precede leve UnboundLocalError : « cannot access local
+        # variable 'domain' ». Le plantage n'arrive qu'en mode interactif,
+        # apres la saisie du mot de passe, donc rien n'est ecrit.
+        nonlocal domain
         ui = TerminalUI(app_context.console, app_context.output_format)
         current = app_context.settings
         target = (path or global_config_path()).expanduser().resolve()
